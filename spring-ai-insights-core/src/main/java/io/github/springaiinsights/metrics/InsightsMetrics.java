@@ -1,0 +1,78 @@
+package io.github.springaiinsights.metrics;
+
+import java.time.Duration;
+import java.util.Locale;
+
+import io.github.springaiinsights.model.ConversationTurn;
+import io.github.springaiinsights.model.ModelCall;
+import io.github.springaiinsights.model.RetrievalRecord;
+import io.github.springaiinsights.model.ToolCallRecord;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
+
+/**
+ * Low-cardinality Micrometer meters derived from recorded turns. User, conversation and turn IDs are never
+ * used as tags; the tenant is a tag only when explicitly enabled.
+ */
+public final class InsightsMetrics {
+
+    private final MeterRegistry registry;
+
+    private final Tags base;
+
+    private final boolean tenantTag;
+
+    public InsightsMetrics(MeterRegistry registry, String application, boolean tenantTag) {
+        this.registry = registry;
+        this.base = Tags.of("application", application);
+        this.tenantTag = tenantTag;
+    }
+
+    public void turnRecorded(ConversationTurn turn) {
+        registry.counter("ai.insights.turns", base.and("outcome", lower(turn.outcome().name()),
+                "streaming", String.valueOf(turn.streaming()))).increment();
+        Tags costTags = tenantTag ? base.and("tenant", turn.tenantId() == null ? "none" : turn.tenantId()) : base;
+        for (ModelCall call : turn.modelCalls()) {
+            Tags model = base.and("model", call.model());
+            registry.counter("ai.insights.tokens", model.and("type", "input")).increment(call.inputTokens());
+            registry.counter("ai.insights.tokens", model.and("type", "output")).increment(call.outputTokens());
+            registry.counter("ai.insights.tokens", model.and("type", "cache_read")).increment(call.cacheReadTokens());
+            registry.counter("ai.insights.tokens", model.and("type", "cache_write")).increment(call.cacheWriteTokens());
+            if (call.cost() != null) {
+                registry.counter("ai.insights.cost", costTags.and("model", call.model(), "currency", turn.currency()))
+                    .increment(call.cost().doubleValue());
+            }
+        }
+        for (ToolCallRecord tool : turn.toolCalls()) {
+            registry.counter("ai.insights.tool.calls", base.and("tool", tool.name(), "outcome",
+                    lower(tool.outcome().name()))).increment();
+        }
+        for (RetrievalRecord retrieval : turn.retrievals()) {
+            registry.counter("ai.insights.retrievals", base.and("store", retrieval.store(), "result",
+                    retrieval.resultCount() == 0 ? "empty" : "hit")).increment();
+        }
+        if (turn.timeToFirstTokenMs() != null) {
+            registry.timer("ai.insights.ttft", base).record(Duration.ofMillis(turn.timeToFirstTokenMs()));
+        }
+    }
+
+    public void eventDropped() {
+        registry.counter("ai.insights.events.dropped", base).increment();
+    }
+
+    public void storeError() {
+        registry.counter("ai.insights.store.errors", base).increment();
+    }
+
+    public void internalError() {
+        registry.counter("ai.insights.internal.errors", base).increment();
+    }
+
+    public void unpricedModel(String model) {
+        registry.counter("ai.insights.unpriced.models", base.and("model", model)).increment();
+    }
+
+    private static String lower(String value) {
+        return value.toLowerCase(Locale.ROOT);
+    }
+}
