@@ -1,6 +1,7 @@
 package io.github.springaiinsights.autoconfigure;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -20,8 +21,11 @@ public class InsightsProperties {
     /** Application name recorded on every turn. Defaults to spring.application.name, else "default". */
     private @Nullable String application;
 
-    /** Where turns are stored. In this version both values use the in-memory store. */
+    /** Where turns are stored. */
     private StoreType store = StoreType.AUTO;
+
+    /** How long turns are kept by a persistent store (at least 1 minute). */
+    private Duration retention = Duration.ofDays(90);
 
     /** Whether prompt and answer text is recorded. Off by default because it may contain personal data. */
     private boolean captureContent = false;
@@ -35,6 +39,10 @@ public class InsightsProperties {
     private final Writer writer = new Writer();
 
     private final Memory memory = new Memory();
+
+    private final Capture capture = new Capture();
+
+    private final Mongodb mongodb = new Mongodb();
 
     public boolean isEnabled() {
         return enabled;
@@ -58,6 +66,14 @@ public class InsightsProperties {
 
     public void setStore(StoreType store) {
         this.store = store;
+    }
+
+    public Duration getRetention() {
+        return retention;
+    }
+
+    public void setRetention(Duration retention) {
+        this.retention = retention;
     }
 
     public boolean isCaptureContent() {
@@ -88,11 +104,21 @@ public class InsightsProperties {
         return memory;
     }
 
+    public Capture getCapture() {
+        return capture;
+    }
+
+    public Mongodb getMongodb() {
+        return mongodb;
+    }
+
     public enum StoreType {
-        /** The best store available on the classpath; the in-memory store in this version. */
+        /** MongoDB when Spring Data MongoDB is configured, otherwise in memory. */
         AUTO,
         /** Bounded in-memory store; data is lost on restart. */
-        MEMORY
+        MEMORY,
+        /** The application's MongoDB (5.0 or later); startup fails if Spring Data MongoDB is not configured. */
+        MONGODB
     }
 
     public static class Identity {
@@ -264,6 +290,37 @@ public class InsightsProperties {
 
         public void setMaxTurns(int maxTurns) {
             this.maxTurns = maxTurns;
+        }
+    }
+
+    public static class Capture {
+
+        /**
+         * How long a finished turn waits for its model calls to report usage before it is recorded without them and
+         * counted in ai.insights.turns.stalled.
+         */
+        private Duration stallTimeout = Duration.ofSeconds(30);
+
+        public Duration getStallTimeout() {
+            return stallTimeout;
+        }
+
+        public void setStallTimeout(Duration stallTimeout) {
+            this.stallTimeout = stallTimeout;
+        }
+    }
+
+    public static class Mongodb {
+
+        /** Prefix of the collections used in the application's MongoDB database. */
+        private String collectionPrefix = "ai_insights_";
+
+        public String getCollectionPrefix() {
+            return collectionPrefix;
+        }
+
+        public void setCollectionPrefix(String collectionPrefix) {
+            this.collectionPrefix = collectionPrefix;
         }
     }
 }

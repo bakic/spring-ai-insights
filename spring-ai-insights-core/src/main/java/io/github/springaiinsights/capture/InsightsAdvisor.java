@@ -5,6 +5,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.github.springaiinsights.identity.InsightsContextKeys;
 import io.github.springaiinsights.identity.InsightsIdentity;
@@ -50,6 +53,9 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
 
     private static final String UNKNOWN = "unknown";
 
+    /** Marks a turn as published, so a stall timeout scheduled afterwards is cancelled at once. */
+    private static final Future<?> DONE = CompletableFuture.completedFuture(null);
+
     private final ObservationRegistry observations;
 
     private final InsightsIdentityResolver identities;
@@ -66,9 +72,11 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
 
     private final boolean captureContent;
 
+    private final TurnTimeouts timeouts;
+
     public InsightsAdvisor(ObservationRegistry observations, InsightsIdentityResolver identities,
             @Nullable Pseudonymiser pseudonymiser, CostCalculator costs, AsyncEventWriter writer,
-            InsightsMetrics metrics, String application, boolean captureContent) {
+            InsightsMetrics metrics, String application, boolean captureContent, TurnTimeouts timeouts) {
         this.observations = observations;
         this.identities = identities;
         this.pseudonymiser = pseudonymiser;
@@ -77,6 +85,7 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
         this.metrics = metrics;
         this.application = application;
         this.captureContent = captureContent;
+        this.timeouts = timeouts;
     }
 
     @Override
@@ -222,16 +231,41 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
             if (captureContent) {
                 recorder.setContent(request.prompt().getUserMessage().getText(), assistantText);
             }
-            recorder.finishWhenIdle(outcome, error, reasons, endNanos, r -> {
+            AtomicReference<@Nullable Future<?>> timeout = new AtomicReference<>();
+            boolean deferred = recorder.finishWhenIdle(outcome, error, reasons, endNanos, r -> {
                 if (outcome != TurnOutcome.SUCCESS && seenUsage != null) {
                     r.fillUnreportedUsage(value(seenUsage.getPromptTokens()), value(seenUsage.getCompletionTokens()),
                             value(seenUsage.getCacheReadInputTokens()), value(seenUsage.getCacheWriteInputTokens()));
                 }
                 addUncorrelatedUsage(r, last);
-            }, this::publish);
+            }, turn -> {
+                cancel(timeout.getAndSet(DONE));
+                publish(turn);
+            });
+            if (deferred) {
+                Future<?> scheduled = timeouts.schedule(() -> {
+                    try {
+                        if (recorder.forceFinish()) {
+                            metrics.turnStalled();
+                        }
+                    }
+                    catch (RuntimeException e) {
+                        metrics.internalError();
+                    }
+                });
+                if (!timeout.compareAndSet(null, scheduled)) {
+                    cancel(scheduled);
+                }
+            }
         }
         catch (RuntimeException e) {
             metrics.internalError();
+        }
+    }
+
+    private static void cancel(@Nullable Future<?> timeout) {
+        if (timeout != null && timeout != DONE) {
+            timeout.cancel(false);
         }
     }
 

@@ -11,6 +11,7 @@ import org.apache.commons.logging.LogFactory;
 
 import io.github.springaiinsights.capture.InsightsAdvisor;
 import io.github.springaiinsights.capture.InsightsObservationHandler;
+import io.github.springaiinsights.capture.TurnTimeouts;
 import io.github.springaiinsights.identity.InsightsIdentityResolver;
 import io.github.springaiinsights.identity.Pseudonymiser;
 import io.github.springaiinsights.metrics.InsightsMetrics;
@@ -45,14 +46,23 @@ public class InsightsAutoConfiguration {
     static final String NO_SECRET_WARNING = "ai-insights.identity.secret is not set: user IDs are pseudonymised "
             + "with a random key and will change on restart";
 
+    static final String NO_SECRET_FAILURE = "ai-insights.identity.secret must be set when turns are stored "
+            + "persistently: pseudonymised user IDs must stay stable across restarts";
+
+    static final String MONGODB_MISSING = "ai-insights.store=mongodb requires Spring Data MongoDB and a single "
+            + "MongoOperations bean (for example the auto-configured MongoTemplate)";
+
     private static final Log logger = LogFactory.getLog(InsightsAutoConfiguration.class);
 
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBooleanProperty(name = "ai-insights.identity.pseudonymise", matchIfMissing = true)
-    Pseudonymiser insightsPseudonymiser(InsightsProperties properties) {
+    Pseudonymiser insightsPseudonymiser(InsightsProperties properties, InsightsEventStore store) {
         String secret = properties.getIdentity().getSecret();
         if (!StringUtils.hasText(secret)) {
+            if (!(store instanceof InMemoryEventStore)) {
+                throw new IllegalStateException(NO_SECRET_FAILURE);
+            }
             logger.warn(NO_SECRET_WARNING);
             return Pseudonymiser.withRandomSecret();
         }
@@ -84,6 +94,9 @@ public class InsightsAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     InsightsEventStore insightsEventStore(InsightsProperties properties) {
+        if (properties.getStore() == InsightsProperties.StoreType.MONGODB) {
+            throw new IllegalStateException(MONGODB_MISSING);
+        }
         return new InMemoryEventStore(properties.getMemory().getMaxTurns());
     }
 
@@ -100,15 +113,21 @@ public class InsightsAutoConfiguration {
         return new InsightsObservationHandler(metrics);
     }
 
+    @Bean(destroyMethod = "close")
+    @ConditionalOnMissingBean
+    TurnTimeouts insightsTurnTimeouts(InsightsProperties properties) {
+        return new TurnTimeouts(properties.getCapture().getStallTimeout());
+    }
+
     @Bean
     @ConditionalOnMissingBean
     InsightsAdvisor insightsAdvisor(ObjectProvider<ObservationRegistry> observationRegistry,
             InsightsIdentityResolver identityResolver, ObjectProvider<Pseudonymiser> pseudonymiser,
-            CostCalculator costs, AsyncEventWriter writer, InsightsMetrics metrics, InsightsProperties properties,
-            Environment environment) {
+            CostCalculator costs, AsyncEventWriter writer, InsightsMetrics metrics, TurnTimeouts timeouts,
+            InsightsProperties properties, Environment environment) {
         return new InsightsAdvisor(observationRegistry.getIfUnique(() -> ObservationRegistry.NOOP), identityResolver,
                 pseudonymiser.getIfAvailable(), costs, writer, metrics, application(properties, environment),
-                properties.isCaptureContent());
+                properties.isCaptureContent(), timeouts);
     }
 
     @Bean

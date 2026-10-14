@@ -143,8 +143,10 @@ public final class TurnRecorder {
      * Finishes the turn as soon as no model call is open. Streaming providers stop their observation after the
      * stream has terminated downstream, so the advisor sees the end of the stream before the last model call is
      * reported. {@code beforeFinish} runs just before the turn is built; {@code sink} receives it.
+     *
+     * @return {@code true} if the finish was deferred until the open model calls end (see {@link #forceFinish()})
      */
-    public void finishWhenIdle(TurnOutcome outcome, @Nullable Throwable error, List<String> finishReasons,
+    public boolean finishWhenIdle(TurnOutcome outcome, @Nullable Throwable error, List<String> finishReasons,
             long endNanos, Consumer<TurnRecorder> beforeFinish, Consumer<ConversationTurn> sink) {
         Runnable finish = () -> {
             beforeFinish.accept(this);
@@ -153,10 +155,30 @@ public final class TurnRecorder {
         synchronized (this) {
             if (openModelCalls > 0) {
                 pendingFinish = finish;
-                return;
+                return true;
             }
         }
         finish.run();
+        return false;
+    }
+
+    /**
+     * Runs a deferred finish now, without waiting for the open model calls; later {@link #endModelCall()} calls do
+     * nothing.
+     *
+     * @return {@code true} if a deferred finish ran
+     */
+    public boolean forceFinish() {
+        Runnable finish;
+        synchronized (this) {
+            finish = pendingFinish;
+            pendingFinish = null;
+        }
+        if (finish == null) {
+            return false;
+        }
+        finish.run();
+        return true;
     }
 
     /**

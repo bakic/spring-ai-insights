@@ -7,7 +7,7 @@ and token counters, but no per-user view, no cost, and no single record per ques
 `spring-ai-insights` is a Spring Boot starter that records **one turn per ChatClient call** with
 everything that happened inside it. Design and roadmap: [design.md](design.md).
 
-## What you get (v0.1, core)
+## What you get
 
 Every `ChatClient` call (blocking or streaming) becomes a `ConversationTurn`:
 
@@ -18,8 +18,8 @@ Every `ChatClient` call (blocking or streaming) becomes a `ConversationTurn`:
 - **cost**: total cost of the turn in your configured currency
 - **your attributes**: any key you pass as an advisor param (feature, channel, A/B variant…)
 
-Turns go to a bounded in-memory store through an asynchronous writer: recording never blocks
-or breaks a chat. Micrometer metrics (all tagged with `application`):
+Turns go to a store (your MongoDB, or a bounded in-memory store) through an asynchronous writer:
+recording never blocks or breaks a chat. Micrometer metrics (all tagged with `application`):
 
 | Metric | Extra tags |
 |---|---|
@@ -30,6 +30,7 @@ or breaks a chat. Micrometer metrics (all tagged with `application`):
 | `ai.insights.retrievals` | `store`, `result` (`hit`, `empty`) |
 | `ai.insights.ttft` (timer) | – |
 | `ai.insights.events.dropped`, `ai.insights.store.errors`, `ai.insights.internal.errors` | – |
+| `ai.insights.turns.stalled` | – (finished turns whose model call never reported its usage; recorded without it) |
 | `ai.insights.unpriced.models` | `model` |
 
 User and conversation IDs are **never** metric tags (unbounded cardinality); they live in the turn records.
@@ -132,16 +133,58 @@ ChatClient chat = ChatClient.builder(chatModel, observationRegistry, null, null)
 `ChatClient.create(chatModel)` has no observation registry: turns are still recorded, but only with
 the token usage of the final response, provider `unknown`, and no tool or retrieval details.
 
+## Storage
+
+With Spring Data MongoDB configured in your app (`spring-boot-starter-data-mongodb`, MongoDB 5.0 or
+later), turns are stored in **your** database; nothing else to run. Otherwise they stay in memory.
+
+| | MongoDB | In memory |
+|---|---|---|
+| Chosen when | a single `MongoOperations` bean exists (`store=auto`) or `store=mongodb` | no MongoDB, or `store=memory` |
+| Survives restarts | yes | no |
+| Retention | TTL index on `startedAt`, `ai-insights.retention` (90 days) | `memory.max-turns` newest turns |
+| Collection | `ai_insights_turns` (prefix configurable) | – |
+
+With `store=mongodb` and no MongoDB configured, startup fails. With a persistent store,
+`ai-insights.identity.secret` is **required** (startup fails without it): otherwise pseudonymised
+user IDs would change at every restart. If MongoDB is down, chats keep working; failed writes are
+counted in `ai.insights.store.errors`.
+
+Indexes are created on first write. Changing `retention` updates the TTL index on the next start
+(the `readWrite` role is enough).
+
+## Analytics API
+
+The store also answers questions about usage. Inject `InsightsAnalytics`:
+
+```java
+var filter = new InsightsFilter("support-bot", from, to, null, ZoneId.of("Europe/Paris"));
+
+UsageSummary summary = analytics.summary(filter);       // turns, conversations, active users, tokens, cost, errors…
+List<TimeBucket> daily = analytics.timeline(filter, Granularity.DAY);
+List<ModelUsage> models = analytics.models(filter);     // tokens and cost per model
+List<ToolUsage> tools = analytics.tools(filter);        // calls, errors, avg duration, repeated calls
+List<RetrievalUsage> kb = analytics.retrievals(filter); // per vector store: queries, empty results, avg top score
+List<UserUsage> top = analytics.topUsers(filter, 10);
+List<TenantUsage> tenants = analytics.tenants(filter);
+List<ConversationTurn> chat = analytics.conversation("support-bot", conversationId);
+```
+
+Costs only add up priced model calls; `unpricedTurns` tells you how many turns are incomplete.
+
 ## Configuration
 
 | Property | Default | |
 |---|---|---|
 | `ai-insights.enabled` | `true` | |
 | `ai-insights.application` | `spring.application.name`, else `default` | `application` tag and turn field |
-| `ai-insights.store` | `auto` | `auto` or `memory`; both mean in-memory in v0.1 |
+| `ai-insights.store` | `auto` | `auto`, `mongodb` or `memory` |
+| `ai-insights.retention` | `90d` | how long a persistent store keeps turns (at least 1 minute) |
+| `ai-insights.mongodb.collection-prefix` | `ai_insights_` | collection name prefix |
+| `ai-insights.capture.stall-timeout` | `30s` | how long a finished turn waits for its model call's usage before it is recorded without it |
 | `ai-insights.capture-content` | `false` | record prompt and answer text |
 | `ai-insights.identity.pseudonymise` | `true` | HMAC-SHA256 user IDs |
-| `ai-insights.identity.secret` | – | HMAC key |
+| `ai-insights.identity.secret` | – | HMAC key; required with a persistent store |
 | `ai-insights.identity.tenant-claim` | `tenant_id` | JWT claim holding the tenant |
 | `ai-insights.pricing.currency` | `USD` | |
 | `ai-insights.pricing.models[]` | – | `model`, `input`, `output`, `cache-read`, `cache-write`, `input-includes-cached` |
@@ -160,6 +203,5 @@ resolver (`InsightsIdentityResolver`), or the pricing (`PriceCatalog`) with your
 
 ## Roadmap
 
-- **Plan 2: MongoDB store**, with TTL retention and aggregation queries (the app's own database).
 - **Plan 3: built-in dashboard and feedback**, `/ai-insights` UI for usage, cost, tools, knowledge base and quality, plus thumbs up/down linked by turn ID.
 - **Plan 4: weekly report, knowledge-base insights, Grafana dashboards and release**, an email/Slack summary for managers, Bedrock Knowledge Base coverage, and the first Maven Central release.
