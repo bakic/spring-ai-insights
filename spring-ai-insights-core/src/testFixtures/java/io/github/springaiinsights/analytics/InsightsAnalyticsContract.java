@@ -3,17 +3,23 @@ package io.github.springaiinsights.analytics;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.stream.Stream;
 
+import io.github.springaiinsights.feedback.Feedback;
+import io.github.springaiinsights.feedback.FeedbackStore;
+import io.github.springaiinsights.feedback.Rating;
 import io.github.springaiinsights.model.ConversationTurn;
 import io.github.springaiinsights.store.InsightsEventStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static io.github.springaiinsights.analytics.ContractTurns.FROM;
+import static io.github.springaiinsights.analytics.ContractTurns.HELP;
 import static io.github.springaiinsights.analytics.ContractTurns.PARIS;
 import static io.github.springaiinsights.analytics.ContractTurns.SHOP;
 import static io.github.springaiinsights.analytics.ContractTurns.TO;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 
 /**
@@ -26,9 +32,13 @@ public abstract class InsightsAnalyticsContract {
 
     protected abstract InsightsAnalytics analytics();
 
+    protected abstract FeedbackStore feedbackStore();
+
     @BeforeEach
     void saveDataset() {
         ContractTurns.all().forEach(store()::save);
+        ContractTurns.help().forEach(store()::save);
+        ContractTurns.feedback().forEach(feedbackStore()::saveFeedback);
     }
 
     private static BigDecimal bd(String value) {
@@ -55,6 +65,57 @@ public abstract class InsightsAnalyticsContract {
         assertThat(s.toolCalls()).isEqualTo(3);
         assertThat(s.retrievals()).isEqualTo(2);
         assertThat(s.emptyRetrievals()).isEqualTo(1);
+        assertThat(s.retrievalTurns()).isEqualTo(2);
+    }
+
+    @Test
+    void retrievalTurnsCountEmptyRetrievals() {
+        assertThat(analytics().summary(HELP).retrievalTurns()).isEqualTo(3);
+    }
+
+    @Test
+    void newUsersFirstSeenInRange() {
+        assertThat(analytics().newUsers(SHOP)).isEqualTo(2);
+        assertThat(analytics().newUsers(HELP)).isEqualTo(2);
+        assertThat(analytics().newUsers(new InsightsFilter("help", FROM, TO, "globex", PARIS))).isEqualTo(1);
+        var later = new InsightsFilter("shop", Instant.parse("2026-10-01T22:00:00Z"), TO, null, PARIS);
+        assertThat(analytics().newUsers(later)).isEqualTo(1);
+    }
+
+    @Test
+    void documentsMostHitFirst() {
+        assertThat(analytics().documents(HELP, 10))
+            .extracting(DocumentUsage::store, DocumentUsage::documentId, DocumentUsage::hits)
+            .containsExactly(tuple("kb", "d1", 2L), tuple("faq", "q1", 1L), tuple("kb", "d2", 1L));
+        assertThat(analytics().documents(HELP, 2)).hasSize(2);
+    }
+
+    @Test
+    void quality() {
+        QualitySummary q = analytics().quality(HELP);
+        assertThat(q.positiveFeedback()).isEqualTo(2);
+        assertThat(q.negativeFeedback()).isEqualTo(1);
+        assertThat(q.finishReasons()).containsExactly(new KeyCount("STOP", 2), new KeyCount("LENGTH", 1));
+        assertThat(q.errorTypes()).containsExactly(new KeyCount("TimeoutException", 2));
+        QualitySummary acme = analytics().quality(new InsightsFilter("help", FROM, TO, "acme", PARIS));
+        assertThat(acme.positiveFeedback()).isEqualTo(1);
+        assertThat(acme.negativeFeedback()).isEqualTo(1);
+        assertThat(acme.errorTypes()).isEmpty();
+    }
+
+    @Test
+    void recentFeedbackNewestFirst() {
+        assertThat(analytics().recentFeedback(HELP, null, 10)).extracting(Feedback::turnId)
+            .containsExactly("H5", "H2", "H1");
+        assertThat(analytics().recentFeedback(HELP, Rating.DOWN, 10)).containsExactly(ContractTurns.F2);
+        assertThat(analytics().recentFeedback(HELP, null, 1)).extracting(Feedback::turnId).containsExactly("H5");
+    }
+
+    @Test
+    void conversationFeedbackOldestFirst() {
+        assertThat(analytics().conversationFeedback("help", "h1")).containsExactly(ContractTurns.F1,
+                ContractTurns.F2);
+        assertThat(analytics().conversationFeedback("shop", "h1")).isEmpty();
     }
 
     @Test
@@ -74,7 +135,7 @@ public abstract class InsightsAnalyticsContract {
 
     @Test
     void allApplicationsWhenNull() {
-        assertThat(analytics().summary(new InsightsFilter(null, FROM, TO, null, PARIS)).turns()).isEqualTo(7);
+        assertThat(analytics().summary(new InsightsFilter(null, FROM, TO, null, PARIS)).turns()).isEqualTo(12);
     }
 
     @Test
@@ -93,6 +154,12 @@ public abstract class InsightsAnalyticsContract {
         assertThat(analytics().retrievals(empty)).isEmpty();
         assertThat(analytics().topUsers(empty, 10)).isEmpty();
         assertThat(analytics().tenants(empty)).isEmpty();
+        assertThat(s.retrievalTurns()).isZero();
+        assertThat(analytics().newUsers(empty)).isZero();
+        assertThat(analytics().documents(empty, 10)).isEmpty();
+        assertThat(analytics().quality(empty)).isEqualTo(new QualitySummary(0, 0, java.util.List.of(),
+                java.util.List.of()));
+        assertThat(analytics().recentFeedback(empty, null, 10)).isEmpty();
     }
 
     @Test
@@ -233,12 +300,13 @@ public abstract class InsightsAnalyticsContract {
 
     @Test
     void applicationsSorted() {
-        assertThat(analytics().applications()).containsExactly("crm", "shop");
+        assertThat(analytics().applications()).containsExactly("crm", "help", "shop");
     }
 
     @Test
     void storedTurnRoundTrips() {
-        for (ConversationTurn expected : ContractTurns.all()) {
+        for (ConversationTurn expected : Stream.concat(ContractTurns.all().stream(), ContractTurns.help().stream())
+            .toList()) {
             assertThat(store().findTurn(expected.turnId())).get()
                 .usingRecursiveComparison()
                 .withComparatorForType(Comparator.naturalOrder(), BigDecimal.class)

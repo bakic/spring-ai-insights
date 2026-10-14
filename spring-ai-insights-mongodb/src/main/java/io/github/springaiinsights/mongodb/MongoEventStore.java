@@ -160,7 +160,7 @@ public final class MongoEventStore implements InsightsEventStore, InsightsAnalyt
         Document result = aggregate(List.of(match(filter), PER_TURN, new Document("$facet", facets))).get(0);
         List<Document> totalsList = result.getList("totals", Document.class);
         if (totalsList.isEmpty()) {
-            return new UsageSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, BigDecimal.ZERO, 0, 0, null, 0, 0, 0);
+            return new UsageSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, BigDecimal.ZERO, 0, 0, null, 0, 0, 0, 0);
         }
         Document t = totalsList.get(0);
         Object ttft = t.get("avgTimeToFirstTokenMs");
@@ -169,7 +169,7 @@ public final class MongoEventStore implements InsightsEventStore, InsightsAnalyt
                 number(t, "inputTokens"), number(t, "outputTokens"), number(t, "cacheReadTokens"),
                 number(t, "cacheWriteTokens"), cost(t.get("cost")), number(t, "unpricedTurns"),
                 ((Number) t.get("avgLatencyMs")).doubleValue(), ttft == null ? null : ((Number) ttft).doubleValue(),
-                number(t, "toolCalls"), number(t, "retrievals"), number(t, "emptyRetrievals"));
+                number(t, "toolCalls"), number(t, "retrievals"), number(t, "emptyRetrievals"), 0);
     }
 
     @Override
@@ -303,6 +303,33 @@ public final class MongoEventStore implements InsightsEventStore, InsightsAnalyt
             .find(Filters.and(Filters.eq("application", application), Filters.eq("conversationId", conversationId)))
             .sort(Sorts.ascending("startedAt"))
             .limit(MAX_CONVERSATION_TURNS));
+    }
+
+    @Override
+    public long newUsers(InsightsFilter filter) {
+        throw new UnsupportedOperationException("Plan 3 Task 3");
+    }
+
+    @Override
+    public List<io.github.springaiinsights.analytics.DocumentUsage> documents(InsightsFilter filter, int limit) {
+        throw new UnsupportedOperationException("Plan 3 Task 3");
+    }
+
+    @Override
+    public io.github.springaiinsights.analytics.QualitySummary quality(InsightsFilter filter) {
+        throw new UnsupportedOperationException("Plan 3 Task 3");
+    }
+
+    @Override
+    public List<io.github.springaiinsights.feedback.Feedback> recentFeedback(InsightsFilter filter,
+            io.github.springaiinsights.feedback.Rating rating, int limit) {
+        throw new UnsupportedOperationException("Plan 3 Task 3");
+    }
+
+    @Override
+    public List<io.github.springaiinsights.feedback.Feedback> conversationFeedback(String application,
+            String conversationId) {
+        throw new UnsupportedOperationException("Plan 3 Task 3");
     }
 
     @Override

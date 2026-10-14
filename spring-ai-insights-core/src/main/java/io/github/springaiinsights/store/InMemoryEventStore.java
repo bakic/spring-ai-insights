@@ -17,11 +17,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import io.github.springaiinsights.analytics.DocumentUsage;
 import io.github.springaiinsights.analytics.Granularity;
 import io.github.springaiinsights.analytics.InsightsAnalytics;
 import io.github.springaiinsights.analytics.InsightsFilter;
+import io.github.springaiinsights.analytics.KeyCount;
 import io.github.springaiinsights.analytics.ModelUsage;
+import io.github.springaiinsights.analytics.QualitySummary;
 import io.github.springaiinsights.analytics.RetrievalUsage;
 import io.github.springaiinsights.analytics.TenantUsage;
 import io.github.springaiinsights.analytics.TimeBucket;
@@ -30,12 +34,14 @@ import io.github.springaiinsights.analytics.UsageSummary;
 import io.github.springaiinsights.analytics.UserUsage;
 import io.github.springaiinsights.feedback.Feedback;
 import io.github.springaiinsights.feedback.FeedbackStore;
+import io.github.springaiinsights.feedback.Rating;
 import io.github.springaiinsights.model.ConversationTurn;
 import io.github.springaiinsights.model.ModelCall;
 import io.github.springaiinsights.model.RetrievalRecord;
 import io.github.springaiinsights.model.ToolCallRecord;
 import io.github.springaiinsights.model.ToolOutcome;
 import io.github.springaiinsights.model.TurnOutcome;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Bounded, process-local store. Keeps at most {@code maxTurns} turns and as many feedback entries, evicting the
@@ -121,7 +127,8 @@ public final class InMemoryEventStore implements InsightsEventStore, FeedbackSto
                 selected.stream().mapToLong(ConversationTurn::latencyMs).average().orElse(0),
                 ttfts.isEmpty() ? null : ttfts.stream().mapToLong(Long::longValue).average().getAsDouble(),
                 selected.stream().mapToLong(t -> t.toolCalls().size()).sum(), retrievals.size(),
-                retrievals.stream().filter(r -> r.resultCount() == 0).count());
+                retrievals.stream().filter(r -> r.resultCount() == 0).count(),
+                selected.stream().filter(t -> !t.retrievals().isEmpty()).count());
     }
 
     @Override
@@ -240,6 +247,57 @@ public final class InMemoryEventStore implements InsightsEventStore, FeedbackSto
             .toList();
     }
 
+    @Override
+    public long newUsers(InsightsFilter filter) {
+        Set<String> active = select(filter).stream()
+            .map(ConversationTurn::userId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+        Set<String> seenBefore = turns.values().stream()
+            .filter(t -> filter.application() == null || filter.application().equals(t.application()))
+            .filter(t -> filter.tenantId() == null || filter.tenantId().equals(t.tenantId()))
+            .filter(t -> t.startedAt().isBefore(filter.from()))
+            .map(ConversationTurn::userId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+        return active.stream().filter(u -> !seenBefore.contains(u)).count();
+    }
+
+    @Override
+    public List<DocumentUsage> documents(InsightsFilter filter, int limit) {
+        Map<List<String>, Long> hits = select(filter).stream()
+            .flatMap(t -> t.retrievals().stream())
+            .flatMap(r -> r.documentIds().stream().map(d -> List.of(r.store(), d)))
+            .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+        return hits.entrySet().stream()
+            .map(e -> new DocumentUsage(e.getKey().get(0), e.getKey().get(1), e.getValue()))
+            .sorted(Comparator.comparingLong(DocumentUsage::hits).reversed()
+                .thenComparing(DocumentUsage::store)
+                .thenComparing(DocumentUsage::documentId))
+            .limit(limit)
+            .toList();
+    }
+
+    @Override
+    public QualitySummary quality(InsightsFilter filter) {
+        List<Feedback> rated = selectFeedback(filter).toList();
+        List<ConversationTurn> selected = select(filter);
+        return new QualitySummary(rated.stream().filter(f -> f.rating() == Rating.UP).count(),
+                rated.stream().filter(f -> f.rating() == Rating.DOWN).count(),
+                keyCounts(selected.stream().flatMap(t -> t.finishReasons().stream().distinct()).toList()),
+                keyCounts(selected.stream().map(ConversationTurn::errorType).filter(Objects::nonNull).toList()));
+    }
+
+    @Override
+    public List<Feedback> recentFeedback(InsightsFilter filter, @Nullable Rating rating, int limit) {
+        return selectFeedback(filter)
+            .filter(f -> rating == null || f.rating() == rating)
+            .sorted(Comparator.comparing(Feedback::createdAt).reversed().thenComparing(Feedback::turnId))
+            .limit(limit)
+            .toList();
+    }
+
+    @Override
     public List<Feedback> conversationFeedback(String application, String conversationId) {
         return feedback.values().stream()
             .filter(f -> f.application().equals(application) && f.conversationId().equals(conversationId))
@@ -257,6 +315,23 @@ public final class InMemoryEventStore implements InsightsEventStore, FeedbackSto
             .filter(t -> filter.application() == null || filter.application().equals(t.application()))
             .filter(t -> !t.startedAt().isBefore(filter.from()) && t.startedAt().isBefore(filter.to()))
             .filter(t -> filter.tenantId() == null || filter.tenantId().equals(t.tenantId()))
+            .toList();
+    }
+
+    private Stream<Feedback> selectFeedback(InsightsFilter filter) {
+        return feedback.values().stream()
+            .filter(f -> filter.application() == null || filter.application().equals(f.application()))
+            .filter(f -> !f.createdAt().isBefore(filter.from()) && f.createdAt().isBefore(filter.to()))
+            .filter(f -> filter.tenantId() == null || filter.tenantId().equals(f.tenantId()));
+    }
+
+    private static List<KeyCount> keyCounts(List<String> keys) {
+        return keys.stream()
+            .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()))
+            .entrySet()
+            .stream()
+            .map(e -> new KeyCount(e.getKey(), e.getValue()))
+            .sorted(Comparator.comparingLong(KeyCount::count).reversed().thenComparing(KeyCount::key))
             .toList();
     }
 
