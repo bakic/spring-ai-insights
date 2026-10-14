@@ -24,6 +24,8 @@ public final class InsightsObservationHandler implements ObservationHandler<Obse
 
     private static final String START_NANOS_KEY = InsightsObservationHandler.class.getName() + ".start";
 
+    private static final String RECORDER_KEY = InsightsObservationHandler.class.getName() + ".recorder";
+
     private static final String UNKNOWN = "unknown";
 
     private final InsightsMetrics metrics;
@@ -41,25 +43,59 @@ public final class InsightsObservationHandler implements ObservationHandler<Obse
     @Override
     public void onStart(Observation.Context context) {
         context.put(START_NANOS_KEY, System.nanoTime());
+        if (context instanceof ChatModelObservationContext) {
+            try {
+                TurnRecorder recorder = TurnRecorders.outermost(context);
+                if (recorder != null) {
+                    recorder.beginModelCall();
+                    context.put(RECORDER_KEY, recorder);
+                }
+            }
+            catch (RuntimeException e) {
+                metrics.internalError();
+            }
+        }
     }
 
     @Override
     public void onStop(Observation.Context context) {
+        if (context instanceof ChatModelObservationContext chat) {
+            TurnRecorder recorder = context.get(RECORDER_KEY);
+            if (recorder == null) {
+                return;
+            }
+            try {
+                recordModelCall(recorder, chat, durationMs(context));
+            }
+            catch (RuntimeException e) {
+                metrics.internalError();
+            }
+            finally {
+                endModelCall(recorder);
+            }
+            return;
+        }
         try {
             TurnRecorder recorder = TurnRecorders.outermost(context);
             if (recorder == null) {
                 return;
             }
             long durationMs = durationMs(context);
-            if (context instanceof ChatModelObservationContext chat) {
-                recordModelCall(recorder, chat, durationMs);
-            }
-            else if (context instanceof ToolCallingObservationContext tool) {
+            if (context instanceof ToolCallingObservationContext tool) {
                 recorder.addToolCall(tool.getToolDefinition().name(), durationMs, tool.getError());
             }
             else if (context instanceof VectorStoreObservationContext store) {
                 recordRetrieval(recorder, store, durationMs);
             }
+        }
+        catch (RuntimeException e) {
+            metrics.internalError();
+        }
+    }
+
+    private void endModelCall(TurnRecorder recorder) {
+        try {
+            recorder.endModelCall();
         }
         catch (RuntimeException e) {
             metrics.internalError();

@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 import io.github.springaiinsights.identity.InsightsIdentity;
 import io.github.springaiinsights.model.ConversationTurn;
@@ -57,6 +58,10 @@ public final class TurnRecorder {
     private final AtomicBoolean finished = new AtomicBoolean();
 
     private volatile @Nullable String userMessage;
+
+    private int openModelCalls;
+
+    private @Nullable Runnable pendingFinish;
 
     private volatile @Nullable String assistantMessage;
 
@@ -111,6 +116,47 @@ public final class TurnRecorder {
     public void setContent(@Nullable String userMessage, @Nullable String assistantMessage) {
         this.userMessage = userMessage;
         this.assistantMessage = assistantMessage;
+    }
+
+    /** A model call of this turn has started; the turn will not finish until it ends. */
+    public synchronized void beginModelCall() {
+        openModelCalls++;
+    }
+
+    /** A model call started with {@link #beginModelCall()} has ended (after {@link #addModelCall}). */
+    public void endModelCall() {
+        Runnable finish;
+        synchronized (this) {
+            if (openModelCalls > 0) {
+                openModelCalls--;
+            }
+            if (openModelCalls > 0 || pendingFinish == null) {
+                return;
+            }
+            finish = pendingFinish;
+            pendingFinish = null;
+        }
+        finish.run();
+    }
+
+    /**
+     * Finishes the turn as soon as no model call is open. Streaming providers stop their observation after the
+     * stream has terminated downstream, so the advisor sees the end of the stream before the last model call is
+     * reported. {@code beforeFinish} runs just before the turn is built; {@code sink} receives it.
+     */
+    public void finishWhenIdle(TurnOutcome outcome, @Nullable Throwable error, List<String> finishReasons,
+            long endNanos, Consumer<TurnRecorder> beforeFinish, Consumer<ConversationTurn> sink) {
+        Runnable finish = () -> {
+            beforeFinish.accept(this);
+            finish(outcome, error, finishReasons, endNanos).ifPresent(sink);
+        };
+        synchronized (this) {
+            if (openModelCalls > 0) {
+                pendingFinish = finish;
+                return;
+            }
+        }
+        finish.run();
     }
 
     public boolean hasModelCalls() {

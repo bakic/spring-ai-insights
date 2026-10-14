@@ -139,4 +139,27 @@ class TurnRecorderTest {
         var lone = Observation.start("lone", registry);
         assertThat(TurnRecorders.outermost(lone.getContext())).isNull();
     }
+
+    @Test
+    void finishWhenIdleWaitsForOpenModelCalls() {
+        var r = recorder();
+        var sink = new java.util.ArrayList<ConversationTurn>();
+        r.beginModelCall();
+        r.finishWhenIdle(TurnOutcome.SUCCESS, null, List.of(), 10 * MS, rec -> { }, sink::add);
+        assertThat(sink).isEmpty();
+        r.addModelCall("p", "m1", 5, 5, null, null, 1, null);
+        r.endModelCall();
+        assertThat(sink).singleElement().satisfies(t -> assertThat(t.modelCalls()).hasSize(1));
+        r.endModelCall();
+        assertThat(sink).hasSize(1);
+    }
+
+    @Test
+    void finishWhenIdleRunsBeforeFinishThenSinkImmediatelyWhenIdle() {
+        var r = recorder();
+        var sink = new java.util.ArrayList<ConversationTurn>();
+        r.finishWhenIdle(TurnOutcome.SUCCESS, null, List.of(), 10 * MS,
+                rec -> rec.addModelCall("unknown", "m1", 1, 1, null, null, 0, null), sink::add);
+        assertThat(sink).singleElement().satisfies(t -> assertThat(t.modelCalls()).hasSize(1));
+    }
 }
