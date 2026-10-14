@@ -1,6 +1,7 @@
 package io.github.springaiinsights.feedback;
 
 import java.time.Clock;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -64,7 +65,7 @@ public final class InsightsFeedback {
             return false;
         }
         store.saveFeedback(new Feedback(turn.turnId(), turn.application(), turn.conversationId(), turn.userId(),
-                turn.tenantId(), rating, text, clock.instant()));
+                turn.tenantId(), rating, text, clock.instant().truncatedTo(ChronoUnit.MILLIS)));
         metrics.feedback(rating);
         return true;
     }

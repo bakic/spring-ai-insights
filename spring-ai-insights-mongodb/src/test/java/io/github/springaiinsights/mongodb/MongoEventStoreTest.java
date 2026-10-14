@@ -10,6 +10,8 @@ import java.util.Map;
 
 import com.mongodb.client.MongoClients;
 import io.github.springaiinsights.analytics.ContractTurns;
+import io.github.springaiinsights.feedback.Feedback;
+import io.github.springaiinsights.feedback.Rating;
 import io.github.springaiinsights.model.ConversationTurn;
 import io.github.springaiinsights.model.ModelCall;
 import io.github.springaiinsights.model.RetrievalRecord;
@@ -113,6 +115,35 @@ class MongoEventStoreTest {
                     new Document("application", 1).append("conversationId", 1).append("startedAt", 1),
                     new Document("application", 1).append("tenantId", 1).append("startedAt", -1));
         assertThat(ttl(indexes)).isEqualTo(NINETY_DAYS.toSeconds());
+    }
+
+    @Test
+    void feedbackIsUpserted() {
+        store.saveFeedback(ContractTurns.F2);
+        store.saveFeedback(new Feedback("H2", "help", "h1", "v1", "acme", Rating.UP, null,
+                Instant.parse("2026-10-01T11:06:00Z")));
+        var feedback = template.getCollection("ai_insights_feedback");
+        assertThat(feedback.countDocuments()).isEqualTo(1);
+        Document doc = feedback.find().first();
+        assertThat(doc.getString("_id")).isEqualTo("H2");
+        assertThat(doc.getString("rating")).isEqualTo("UP");
+        assertThat(doc.containsKey("comment")).isFalse();
+        assertThat(doc.getInteger("schemaVersion")).isEqualTo(1);
+        assertThat(store.conversationFeedback("help", "h1")).singleElement()
+            .satisfies(f -> assertThat(f.rating()).isEqualTo(Rating.UP));
+    }
+
+    @Test
+    void feedbackIndexesCreatedOnFirstSave() {
+        store.saveFeedback(ContractTurns.F1);
+        List<Document> indexes = template.getCollection("ai_insights_feedback").listIndexes()
+            .into(new ArrayList<>());
+        assertThat(indexes).extracting(i -> i.getString("name"))
+            .contains("application_createdAt", "application_conversationId", "ttl_createdAt");
+        assertThat(indexes).filteredOn(i -> "ttl_createdAt".equals(i.getString("name")))
+            .singleElement()
+            .satisfies(i -> assertThat(((Number) i.get("expireAfterSeconds")).longValue())
+                .isEqualTo(NINETY_DAYS.toSeconds()));
     }
 
     @Test
