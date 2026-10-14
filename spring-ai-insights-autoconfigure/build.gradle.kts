@@ -1,4 +1,7 @@
+val springBootVersion: String by project
+
 dependencies {
+    annotationProcessor(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
     api(project(":spring-ai-insights-core"))
     api("org.springframework.boot:spring-boot-autoconfigure")
     implementation("org.springframework.ai:spring-ai-autoconfigure-model-chat-client")
@@ -9,4 +12,6 @@ dependencies {
     testImplementation("org.springframework.security:spring-security-core")
     testImplementation("org.springframework.security:spring-security-oauth2-jose")
     testImplementation("io.projectreactor:reactor-test")
+    testImplementation("org.springframework.ai:spring-ai-vector-store")
+    testImplementation("org.springframework.ai:spring-ai-autoconfigure-model-tool")
 }
