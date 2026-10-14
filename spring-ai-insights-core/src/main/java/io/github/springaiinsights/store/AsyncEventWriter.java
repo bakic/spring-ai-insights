@@ -71,7 +71,10 @@ public final class AsyncEventWriter implements AutoCloseable {
         try {
             store.save(turn);
         }
-        catch (RuntimeException e) {
+        catch (VirtualMachineError e) {
+            throw e;
+        }
+        catch (Throwable e) {
             metrics.storeError();
             long now = System.nanoTime();
             long last = lastWarnNanos.get();

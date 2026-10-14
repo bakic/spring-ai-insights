@@ -103,12 +103,16 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
             response = chain.nextCall(request);
         }
         catch (Throwable e) {
-            close(turn.recorder(), request, TurnOutcome.ERROR, e, null, List.of(), null);
+            close(turn.recorder(), request, TurnOutcome.ERROR, e, null, List.of(), null, null);
             throw e;
+        }
+        if (response == null) {
+            close(turn.recorder(), request, TurnOutcome.SUCCESS, null, null, List.of(), null, null);
+            return null;
         }
         ChatResponse chatResponse = response.chatResponse();
         close(turn.recorder(), request, TurnOutcome.SUCCESS, null, chatResponse,
-                chatResponse == null ? List.of() : finishReasons(chatResponse), text(chatResponse));
+                chatResponse == null ? List.of() : finishReasons(chatResponse), text(chatResponse), null);
         return withTurnId(response, turn.recorder().turnId());
     }
 
@@ -132,7 +136,7 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
                 })
                 .doOnError(e -> state.error = e)
                 .doFinally(signal -> close(turn.recorder(), request, outcome(signal), state.error, state.last,
-                        state.finishReasons, state.text == null ? null : state.text.toString()));
+                        state.finishReasons, state.text == null ? null : state.text.toString(), state.usage));
         });
     }
 
@@ -186,6 +190,10 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
                 return;
             }
             state.last = chunk;
+            Usage usage = chunk.getMetadata() == null ? null : chunk.getMetadata().getUsage();
+            if (usage != null && tokens(usage) > 0) {
+                state.usage = usage;
+            }
             String text = text(chunk);
             if (text != null && !text.isEmpty()) {
                 recorder.markFirstToken(System.nanoTime());
@@ -208,14 +216,19 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
 
     private void close(TurnRecorder recorder, ChatClientRequest request, TurnOutcome outcome,
             @Nullable Throwable error, @Nullable ChatResponse last, List<String> reasons,
-            @Nullable String assistantText) {
+            @Nullable String assistantText, @Nullable Usage seenUsage) {
         try {
             long endNanos = System.nanoTime();
             if (captureContent) {
                 recorder.setContent(request.prompt().getUserMessage().getText(), assistantText);
             }
-            recorder.finishWhenIdle(outcome, error, reasons, endNanos, r -> addUncorrelatedUsage(r, last),
-                    this::publish);
+            recorder.finishWhenIdle(outcome, error, reasons, endNanos, r -> {
+                if (outcome != TurnOutcome.SUCCESS && seenUsage != null) {
+                    r.fillUnreportedUsage(value(seenUsage.getPromptTokens()), value(seenUsage.getCompletionTokens()),
+                            value(seenUsage.getCacheReadInputTokens()), value(seenUsage.getCacheWriteInputTokens()));
+                }
+                addUncorrelatedUsage(r, last);
+            }, this::publish);
         }
         catch (RuntimeException e) {
             metrics.internalError();
@@ -236,6 +249,15 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
         recorder.addModelCall(UNKNOWN, model == null || model.isBlank() ? UNKNOWN : model, usage.getPromptTokens(),
                 usage.getCompletionTokens(), usage.getCacheReadInputTokens(), usage.getCacheWriteInputTokens(), 0,
                 null);
+    }
+
+    /** Usage on stream chunks is the turn total so far (ToolCallingAdvisor adds earlier rounds to it). */
+    private static long tokens(Usage usage) {
+        return value(usage.getPromptTokens()) + value(usage.getCompletionTokens());
+    }
+
+    private static long value(@Nullable Number tokens) {
+        return tokens == null ? 0 : tokens.longValue();
     }
 
     private void publish(ConversationTurn turn) {
@@ -303,5 +325,7 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
         volatile @Nullable Throwable error;
 
         volatile List<String> finishReasons = List.of();
+
+        volatile @Nullable Usage usage;
     }
 }

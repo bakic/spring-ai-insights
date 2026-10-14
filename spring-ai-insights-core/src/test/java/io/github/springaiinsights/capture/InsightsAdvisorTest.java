@@ -22,6 +22,11 @@ import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
 
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.ChatClientRequest;
+import org.springframework.ai.chat.client.ChatClientResponse;
+import org.springframework.ai.chat.client.advisor.DefaultAroundAdvisorChain;
+import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
+import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -194,6 +199,50 @@ class InsightsAdvisorTest {
         var turn = awaitTurn();
         assertThat(turn.outcome()).isEqualTo(TurnOutcome.CANCELLED);
         assertThat(turn.modelCalls()).hasSize(1);
+    }
+
+    @Test
+    void streamCancelledKeepsUsageSeenBeforeCancel() {
+        var model = new ScriptedChatModel(registry,
+                p -> List.of(text("a", 30, 0), ScriptedChatModel.chunk("b"), text("c", 30, 9)))
+            .chunkDelay(Duration.ofMillis(50));
+        StepVerifier.create(client(model).prompt().user("hi").stream().content())
+            .expectNextCount(1)
+            .thenCancel()
+            .verify();
+        var turn = awaitTurn();
+        assertThat(turn.outcome()).isEqualTo(TurnOutcome.CANCELLED);
+        assertThat(turn.modelCalls()).singleElement().satisfies(call -> {
+            assertThat(call.provider()).isEqualTo("scripted");
+            assertThat(call.inputTokens()).isEqualTo(30);
+            assertThat(call.outputTokens()).isZero();
+        });
+    }
+
+    @Test
+    void callWithNullResponseFromChainDoesNotThrow() {
+        var advisor = advisor();
+        ChatClientRequest request = ChatClientRequest.builder().prompt(new Prompt("hi")).build();
+        CallAdvisorChain chain = DefaultAroundAdvisorChain.builder(registry)
+            .pushAll(List.of(advisor, new CallAdvisor() {
+                @Override
+                public ChatClientResponse adviseCall(ChatClientRequest r, CallAdvisorChain c) {
+                    return null;
+                }
+
+                @Override
+                public String getName() {
+                    return "null-returning";
+                }
+
+                @Override
+                public int getOrder() {
+                    return 0;
+                }
+            }))
+            .build();
+
+        assertThat(chain.nextCall(request)).isNull();
     }
 
     @Test

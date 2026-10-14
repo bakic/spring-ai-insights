@@ -57,6 +57,27 @@ class AsyncEventWriterTest {
     }
 
     @Test
+    void writerSurvivesErrorFromStore() {
+        var calls = new AtomicInteger();
+        var saved = new InMemoryEventStore(100);
+        InsightsEventStore broken = new DelegatingStore(saved) {
+            @Override
+            public void save(ConversationTurn t) {
+                if (calls.getAndIncrement() == 0) {
+                    throw new NoClassDefFoundError("com/mongodb/Missing");
+                }
+                super.save(t);
+            }
+        };
+        try (var w = new AsyncEventWriter(broken, 10, metrics)) {
+            w.submit(turn("t1"));
+            w.submit(turn("t2"));
+        }
+        assertThat(saved.findTurn("t2")).isPresent();
+        assertThat(reg.get("ai.insights.store.errors").counter().count()).isEqualTo(1);
+    }
+
+    @Test
     void fullQueueDropsAndCounts() throws Exception {
         var release = new CountDownLatch(1);
         var entered = new CountDownLatch(1);

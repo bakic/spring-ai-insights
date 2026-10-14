@@ -78,6 +78,9 @@ Requirements: Java 21, Spring Boot 4.1, Spring AI 2.0.
            input-includes-cached: true   # OpenAI counts cached tokens inside input tokens
    ```
 
+   Because of substring matching, `gpt-4o` also matches `gpt-4o-mini`. List every model you use,
+   so the more specific entry (`gpt-4o-mini`) wins over the shorter one.
+
    Models without a price are still recorded, with a `null` cost, one warning, and the `ai.insights.unpriced.models` counter.
 
 4. Use the auto-configured `ChatClient.Builder` as usual. The advisor is added for you:

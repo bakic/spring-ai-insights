@@ -15,6 +15,8 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import io.github.springaiinsights.ScriptedChatModel;
 import io.github.springaiinsights.identity.InsightsContextKeys;
@@ -126,6 +128,35 @@ class InsightsEndToEndTest {
         }
         finally {
             pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void concurrentStreamsDoNotMixToolCalls() {
+        ChatClient client = builder.build();
+        List<String[]> results = Flux.range(0, 20)
+            .flatMap(i -> {
+                String tool = i % 2 == 0 ? "a" : "b";
+                return client.prompt()
+                    .user("use " + tool)
+                    .tools(tools)
+                    .stream()
+                    .chatClientResponse()
+                    .last()
+                    .map(r -> new String[] { tool, (String) r.context().get(InsightsContextKeys.TURN_ID) })
+                    .subscribeOn(Schedulers.parallel());
+            }, 20)
+            .collectList()
+            .block(Duration.ofSeconds(30));
+
+        assertThat(results).hasSize(20);
+        for (String[] result : results) {
+            ConversationTurn turn = await().atMost(Duration.ofSeconds(5))
+                .until(() -> store.findTurn(result[1]), Optional::isPresent)
+                .orElseThrow();
+            assertThat(turn.streaming()).isTrue();
+            assertThat(turn.toolCalls()).extracting(ToolCallRecord::name).containsExactly(result[0]);
+            assertThat(turn.modelCalls()).hasSize(2);
         }
     }
 

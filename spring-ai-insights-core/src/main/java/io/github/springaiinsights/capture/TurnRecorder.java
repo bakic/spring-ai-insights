@@ -159,6 +159,31 @@ public final class TurnRecorder {
         finish.run();
     }
 
+    /**
+     * Streams that end early (cancel, error) report no usage on the model observation, although the advisor saw
+     * usage in the chunks. Gives the last model call, if it recorded no tokens at all, the part of the usage seen
+     * by the advisor that no model call accounts for. {@code input}..{@code cacheWrite} are turn totals.
+     */
+    public void fillUnreportedUsage(long input, long output, long cacheRead, long cacheWrite) {
+        if (modelCalls.isEmpty()) {
+            return;
+        }
+        int lastIndex = modelCalls.size() - 1;
+        ModelCall last = modelCalls.get(lastIndex);
+        if (last.inputTokens() + last.outputTokens() + last.cacheReadTokens() + last.cacheWriteTokens() != 0) {
+            return;
+        }
+        long in = Math.max(0, input - modelCalls.stream().mapToLong(ModelCall::inputTokens).sum());
+        long out = Math.max(0, output - modelCalls.stream().mapToLong(ModelCall::outputTokens).sum());
+        long read = Math.max(0, cacheRead - modelCalls.stream().mapToLong(ModelCall::cacheReadTokens).sum());
+        long write = Math.max(0, cacheWrite - modelCalls.stream().mapToLong(ModelCall::cacheWriteTokens).sum());
+        if (in + out + read + write == 0) {
+            return;
+        }
+        modelCalls.set(lastIndex, new ModelCall(last.provider(), last.model(), in, out, read, write, last.durationMs(),
+                costs.cost(last.model(), in, out, read, write), last.errorType()));
+    }
+
     public boolean hasModelCalls() {
         return !modelCalls.isEmpty();
     }

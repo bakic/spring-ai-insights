@@ -162,4 +162,44 @@ class TurnRecorderTest {
                 rec -> rec.addModelCall("unknown", "m1", 1, 1, null, null, 0, null), sink::add);
         assertThat(sink).singleElement().satisfies(t -> assertThat(t.modelCalls()).hasSize(1));
     }
+
+    @Test
+    void unreportedUsageFillsTheLastEmptyModelCall() {
+        var recorder = recorder();
+        recorder.addModelCall("p", "m1", 10, 5, 0L, 0L, 1, null);
+        recorder.addModelCall("p", "m1", 0, 0, 0L, 0L, 2, null);
+
+        recorder.fillUnreportedUsage(40, 9, 0, 0);
+
+        var calls = recorder.finish(TurnOutcome.CANCELLED, null, List.of(), 1L).orElseThrow().modelCalls();
+        assertThat(calls.get(0).inputTokens()).isEqualTo(10);
+        assertThat(calls.get(1).inputTokens()).isEqualTo(30);
+        assertThat(calls.get(1).outputTokens()).isEqualTo(4);
+        assertThat(calls.get(1).durationMs()).isEqualTo(2);
+        assertThat(calls.get(1).cost()).isEqualByComparingTo("0.000038");
+    }
+
+    @Test
+    void unreportedUsageLeavesCallsThatReportedTokens() {
+        var recorder = recorder();
+        recorder.addModelCall("p", "m1", 3, 1, 0L, 0L, 1, null);
+
+        recorder.fillUnreportedUsage(40, 9, 0, 0);
+
+        var calls = recorder.finish(TurnOutcome.CANCELLED, null, List.of(), 1L).orElseThrow().modelCalls();
+        assertThat(calls).singleElement().satisfies(c -> assertThat(c.inputTokens()).isEqualTo(3));
+    }
+
+    @Test
+    void unreportedUsageIgnoresNoDeficit() {
+        var recorder = recorder();
+        recorder.addModelCall("p", "m1", 10, 5, 0L, 0L, 1, null);
+        recorder.addModelCall("p", "m1", 0, 0, 0L, 0L, 1, null);
+
+        recorder.fillUnreportedUsage(10, 5, 0, 0);
+
+        var calls = recorder.finish(TurnOutcome.CANCELLED, null, List.of(), 1L).orElseThrow().modelCalls();
+        assertThat(calls.get(1).inputTokens()).isZero();
+        assertThat(calls.get(1).outputTokens()).isZero();
+    }
 }
