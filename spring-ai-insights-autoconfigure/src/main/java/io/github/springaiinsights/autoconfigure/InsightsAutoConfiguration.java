@@ -46,14 +46,23 @@ public class InsightsAutoConfiguration {
     static final String NO_SECRET_WARNING = "ai-insights.identity.secret is not set: user IDs are pseudonymised "
             + "with a random key and will change on restart";
 
+    static final String NO_SECRET_FAILURE = "ai-insights.identity.secret must be set when turns are stored "
+            + "persistently: pseudonymised user IDs must stay stable across restarts";
+
+    static final String MONGODB_MISSING = "ai-insights.store=mongodb requires Spring Data MongoDB and a single "
+            + "MongoOperations bean (for example the auto-configured MongoTemplate)";
+
     private static final Log logger = LogFactory.getLog(InsightsAutoConfiguration.class);
 
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBooleanProperty(name = "ai-insights.identity.pseudonymise", matchIfMissing = true)
-    Pseudonymiser insightsPseudonymiser(InsightsProperties properties) {
+    Pseudonymiser insightsPseudonymiser(InsightsProperties properties, InsightsEventStore store) {
         String secret = properties.getIdentity().getSecret();
         if (!StringUtils.hasText(secret)) {
+            if (!(store instanceof InMemoryEventStore)) {
+                throw new IllegalStateException(NO_SECRET_FAILURE);
+            }
             logger.warn(NO_SECRET_WARNING);
             return Pseudonymiser.withRandomSecret();
         }
@@ -85,6 +94,9 @@ public class InsightsAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     InsightsEventStore insightsEventStore(InsightsProperties properties) {
+        if (properties.getStore() == InsightsProperties.StoreType.MONGODB) {
+            throw new IllegalStateException(MONGODB_MISSING);
+        }
         return new InMemoryEventStore(properties.getMemory().getMaxTurns());
     }
 

@@ -12,6 +12,11 @@ import io.github.springaiinsights.ScriptedChatModel;
 import io.github.springaiinsights.capture.InsightsAdvisor;
 import io.github.springaiinsights.capture.InsightsObservationHandler;
 import io.github.springaiinsights.capture.TurnTimeouts;
+import io.github.springaiinsights.analytics.InsightsAnalytics;
+import io.github.springaiinsights.mongodb.MongoEventStore;
+import com.mongodb.client.MongoClients;
+import org.springframework.data.mongodb.core.MongoOperations;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import io.github.springaiinsights.identity.InsightsIdentity;
 import io.github.springaiinsights.identity.InsightsIdentityResolver;
 import io.github.springaiinsights.identity.Pseudonymiser;
@@ -78,6 +83,94 @@ class InsightsAutoConfigurationTest {
                 .getFailure()
                 .rootCause()
                 .hasMessageContaining("stallTimeout must be positive"));
+    }
+
+    private static final String NO_SECRET_FAILURE = "ai-insights.identity.secret must be set when turns are stored "
+            + "persistently: pseudonymised user IDs must stay stable across restarts";
+
+    private ApplicationContextRunner withMongo() {
+        return runner.withConfiguration(AutoConfigurations.of(InsightsMongoAutoConfiguration.class))
+            .withBean("mongoTemplate", MongoTemplate.class,
+                    () -> new MongoTemplate(MongoClients.create("mongodb://localhost:1/?serverSelectionTimeoutMS=100"),
+                            "db"));
+    }
+
+    @Test
+    void mongoStoreChosenWhenMongoOperationsPresent() {
+        withMongo().withPropertyValues("ai-insights.identity.secret=k").run(context -> {
+            assertThat(context).hasNotFailed();
+            assertThat(context.getBean(InsightsEventStore.class)).isInstanceOf(MongoEventStore.class);
+            assertThat(context.getBean(InsightsAnalytics.class)).isSameAs(context.getBean(InsightsEventStore.class));
+        });
+    }
+
+    @Test
+    void memoryStoreWhenForced() {
+        withMongo().withPropertyValues("ai-insights.store=memory")
+            .run(context -> assertThat(context.getBean(InsightsEventStore.class)).isInstanceOf(InMemoryEventStore.class));
+    }
+
+    @Test
+    void mongodbForcedWithoutMongoFails() {
+        runner.withPropertyValues("ai-insights.store=mongodb", "ai-insights.identity.secret=k")
+            .run(context -> assertThat(context).hasFailed()
+                .getFailure()
+                .rootCause()
+                .hasMessage("ai-insights.store=mongodb requires Spring Data MongoDB and a single MongoOperations "
+                        + "bean (for example the auto-configured MongoTemplate)"));
+    }
+
+    @Test
+    void memoryWhenSpringDataMongoAbsent() {
+        withMongo().withClassLoader(new FilteredClassLoader(MongoOperations.class))
+            .run(context -> assertThat(context.getBean(InsightsEventStore.class)).isInstanceOf(InMemoryEventStore.class));
+    }
+
+    @Test
+    void persistentStoreWithoutSecretFails() {
+        withMongo().run(context -> assertThat(context).hasFailed()
+            .getFailure()
+            .rootCause()
+            .hasMessage(NO_SECRET_FAILURE));
+    }
+
+    @Test
+    void customStoreWithoutSecretFails() {
+        InsightsEventStore custom = new InsightsEventStore() {
+            @Override
+            public void save(io.github.springaiinsights.model.ConversationTurn turn) {
+            }
+
+            @Override
+            public java.util.Optional<io.github.springaiinsights.model.ConversationTurn> findTurn(String turnId) {
+                return java.util.Optional.empty();
+            }
+
+            @Override
+            public java.util.List<io.github.springaiinsights.model.ConversationTurn> findTurns(
+                    io.github.springaiinsights.store.TurnQuery query) {
+                return java.util.List.of();
+            }
+        };
+        runner.withBean(InsightsEventStore.class, () -> custom)
+            .run(context -> assertThat(context).hasFailed().getFailure().rootCause().hasMessage(NO_SECRET_FAILURE));
+    }
+
+    @Test
+    void persistentStoreWithoutPseudonymisationNeedsNoSecret() {
+        withMongo().withPropertyValues("ai-insights.identity.pseudonymise=false")
+            .run(context -> assertThat(context).hasNotFailed());
+    }
+
+    @Test
+    void retentionAndPrefixBind() {
+        withMongo().withPropertyValues("ai-insights.identity.secret=k", "ai-insights.retention=30d",
+                "ai-insights.mongodb.collection-prefix=x_")
+            .run(context -> {
+                MongoEventStore store = context.getBean(MongoEventStore.class);
+                assertThat(store.collectionName()).isEqualTo("x_turns");
+                assertThat(store.retention()).isEqualTo(java.time.Duration.ofDays(30));
+            });
     }
 
     @Test
