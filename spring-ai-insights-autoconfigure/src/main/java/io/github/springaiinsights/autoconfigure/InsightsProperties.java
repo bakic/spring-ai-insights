@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import org.jspecify.annotations.Nullable;
 
@@ -43,6 +44,10 @@ public class InsightsProperties {
     private final Capture capture = new Capture();
 
     private final Mongodb mongodb = new Mongodb();
+
+    private final Dashboard dashboard = new Dashboard();
+
+    private final Feedback feedback = new Feedback();
 
     public boolean isEnabled() {
         return enabled;
@@ -110,6 +115,14 @@ public class InsightsProperties {
 
     public Mongodb getMongodb() {
         return mongodb;
+    }
+
+    public Dashboard getDashboard() {
+        return dashboard;
+    }
+
+    public Feedback getFeedback() {
+        return feedback;
     }
 
     public enum StoreType {
@@ -321,6 +334,72 @@ public class InsightsProperties {
 
         public void setCollectionPrefix(String collectionPrefix) {
             this.collectionPrefix = collectionPrefix;
+        }
+    }
+
+    public static class Dashboard {
+
+        private static final Pattern PATH = Pattern.compile("^(/[A-Za-z0-9._~-]+)+$");
+
+        /** Whether the built-in dashboard and its JSON API are served. */
+        private boolean enabled = true;
+
+        /** Base path of the dashboard and of the feedback endpoint. */
+        private String path = "/ai-insights";
+
+        /** Role required to see the dashboard (checked with isUserInRole). */
+        private String role = "AI_INSIGHTS";
+
+        /** Serve the dashboard without Spring Security. Only for local development. */
+        private boolean allowAnonymous = false;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getPath() {
+            return path;
+        }
+
+        public void setPath(String path) {
+            if (path == null || !PATH.matcher(path).matches()) {
+                throw new IllegalArgumentException("ai-insights.dashboard.path must look like /ai-insights");
+            }
+            this.path = path;
+        }
+
+        public String getRole() {
+            return role;
+        }
+
+        public void setRole(String role) {
+            this.role = role;
+        }
+
+        public boolean isAllowAnonymous() {
+            return allowAnonymous;
+        }
+
+        public void setAllowAnonymous(boolean allowAnonymous) {
+            this.allowAnonymous = allowAnonymous;
+        }
+    }
+
+    public static class Feedback {
+
+        /** Whether the feedback endpoint ({dashboard.path}/feedback) is served. */
+        private boolean enabled = true;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
         }
     }
 }

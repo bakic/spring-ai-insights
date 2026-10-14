@@ -92,8 +92,8 @@ public class InsightsAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean
-    InsightsEventStore insightsEventStore(InsightsProperties properties) {
+    @ConditionalOnMissingBean(InsightsEventStore.class)
+    InMemoryEventStore insightsEventStore(InsightsProperties properties) {
         if (properties.getStore() == InsightsProperties.StoreType.MONGODB) {
             throw new IllegalStateException(MONGODB_MISSING);
         }
