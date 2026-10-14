@@ -30,7 +30,7 @@ recording never blocks or breaks a chat. Micrometer metrics (all tagged with `ap
 | `ai.insights.retrievals` | `store`, `result` (`hit`, `empty`) |
 | `ai.insights.ttft` (timer) | – |
 | `ai.insights.events.dropped`, `ai.insights.store.errors`, `ai.insights.internal.errors` | – |
-| `ai.insights.turns.stalled` | – (streams never completed nor cancelled, closed after `capture.stall-timeout`) |
+| `ai.insights.turns.stalled` | – (finished turns whose model call never reported its usage; recorded without it) |
 | `ai.insights.unpriced.models` | `model` |
 
 User and conversation IDs are **never** metric tags (unbounded cardinality); they live in the turn records.
@@ -150,7 +150,8 @@ With `store=mongodb` and no MongoDB configured, startup fails. With a persistent
 user IDs would change at every restart. If MongoDB is down, chats keep working; failed writes are
 counted in `ai.insights.store.errors`.
 
-Indexes are created on first write. Changing `retention` updates the TTL index in place.
+Indexes are created on first write. Changing `retention` updates the TTL index on the next start
+(the `readWrite` role is enough).
 
 ## Analytics API
 
@@ -180,7 +181,7 @@ Costs only add up priced model calls; `unpricedTurns` tells you how many turns a
 | `ai-insights.store` | `auto` | `auto`, `mongodb` or `memory` |
 | `ai-insights.retention` | `90d` | how long a persistent store keeps turns (at least 1 minute) |
 | `ai-insights.mongodb.collection-prefix` | `ai_insights_` | collection name prefix |
-| `ai-insights.capture.stall-timeout` | `30s` | close a stream turn that never completes nor is cancelled |
+| `ai-insights.capture.stall-timeout` | `30s` | how long a finished turn waits for its model call's usage before it is recorded without it |
 | `ai-insights.capture-content` | `false` | record prompt and answer text |
 | `ai-insights.identity.pseudonymise` | `true` | HMAC-SHA256 user IDs |
 | `ai-insights.identity.secret` | – | HMAC key; required with a persistent store |
