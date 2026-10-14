@@ -129,6 +129,15 @@ public abstract class InsightsAnalyticsContract {
     }
 
     @Test
+    void timelineInUtcOffset() {
+        var utc = new InsightsFilter("shop", FROM, TO, null, java.time.ZoneOffset.UTC);
+        assertThat(analytics().timeline(utc, Granularity.DAY)).extracting(TimeBucket::start, TimeBucket::turns)
+            .containsExactly(org.assertj.core.groups.Tuple.tuple(Instant.parse("2026-09-30T00:00:00Z"), 1L),
+                    org.assertj.core.groups.Tuple.tuple(Instant.parse("2026-10-01T00:00:00Z"), 3L),
+                    org.assertj.core.groups.Tuple.tuple(Instant.parse("2026-10-02T00:00:00Z"), 2L));
+    }
+
+    @Test
     void modelsSplitPricedAndUnpriced() {
         var models = analytics().models(SHOP);
         assertThat(models).extracting(ModelUsage::model).containsExactly("m1", "m2");
