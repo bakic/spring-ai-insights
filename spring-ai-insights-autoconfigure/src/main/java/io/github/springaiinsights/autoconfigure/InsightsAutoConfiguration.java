@@ -11,6 +11,7 @@ import org.apache.commons.logging.LogFactory;
 
 import io.github.springaiinsights.capture.InsightsAdvisor;
 import io.github.springaiinsights.capture.InsightsObservationHandler;
+import io.github.springaiinsights.capture.TurnTimeouts;
 import io.github.springaiinsights.identity.InsightsIdentityResolver;
 import io.github.springaiinsights.identity.Pseudonymiser;
 import io.github.springaiinsights.metrics.InsightsMetrics;
@@ -100,15 +101,21 @@ public class InsightsAutoConfiguration {
         return new InsightsObservationHandler(metrics);
     }
 
+    @Bean(destroyMethod = "close")
+    @ConditionalOnMissingBean
+    TurnTimeouts insightsTurnTimeouts(InsightsProperties properties) {
+        return new TurnTimeouts(properties.getCapture().getStallTimeout());
+    }
+
     @Bean
     @ConditionalOnMissingBean
     InsightsAdvisor insightsAdvisor(ObjectProvider<ObservationRegistry> observationRegistry,
             InsightsIdentityResolver identityResolver, ObjectProvider<Pseudonymiser> pseudonymiser,
-            CostCalculator costs, AsyncEventWriter writer, InsightsMetrics metrics, InsightsProperties properties,
-            Environment environment) {
+            CostCalculator costs, AsyncEventWriter writer, InsightsMetrics metrics, TurnTimeouts timeouts,
+            InsightsProperties properties, Environment environment) {
         return new InsightsAdvisor(observationRegistry.getIfUnique(() -> ObservationRegistry.NOOP), identityResolver,
                 pseudonymiser.getIfAvailable(), costs, writer, metrics, application(properties, environment),
-                properties.isCaptureContent());
+                properties.isCaptureContent(), timeouts);
     }
 
     @Bean

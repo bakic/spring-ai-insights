@@ -1,6 +1,7 @@
 package io.github.springaiinsights.autoconfigure;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -35,6 +36,8 @@ public class InsightsProperties {
     private final Writer writer = new Writer();
 
     private final Memory memory = new Memory();
+
+    private final Capture capture = new Capture();
 
     public boolean isEnabled() {
         return enabled;
@@ -86,6 +89,10 @@ public class InsightsProperties {
 
     public Memory getMemory() {
         return memory;
+    }
+
+    public Capture getCapture() {
+        return capture;
     }
 
     public enum StoreType {
@@ -264,6 +271,23 @@ public class InsightsProperties {
 
         public void setMaxTurns(int maxTurns) {
             this.maxTurns = maxTurns;
+        }
+    }
+
+    public static class Capture {
+
+        /**
+         * How long a finished turn waits for its model calls to report usage before it is recorded without them and
+         * counted in ai.insights.turns.stalled.
+         */
+        private Duration stallTimeout = Duration.ofSeconds(30);
+
+        public Duration getStallTimeout() {
+            return stallTimeout;
+        }
+
+        public void setStallTimeout(Duration stallTimeout) {
+            this.stallTimeout = stallTimeout;
         }
     }
 }

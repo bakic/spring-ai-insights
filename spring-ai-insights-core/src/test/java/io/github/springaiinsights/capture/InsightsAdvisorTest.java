@@ -57,6 +57,10 @@ class InsightsAdvisorTest {
 
     private boolean captureContent = false;
 
+    private Duration stallTimeout = Duration.ofSeconds(5);
+
+    private TurnTimeouts timeouts;
+
     InsightsAdvisorTest() {
         registry.observationConfig().observationHandler(new InsightsObservationHandler(metrics));
     }
@@ -64,11 +68,15 @@ class InsightsAdvisorTest {
     @AfterEach
     void close() {
         writer.close();
+        if (timeouts != null) {
+            timeouts.close();
+        }
     }
 
     private InsightsAdvisor advisor() {
+        timeouts = new TurnTimeouts(stallTimeout);
         return new InsightsAdvisor(registry, resolver, pseudonymiser, TurnRecorderTest.costs(), writer, metrics, "app",
-                captureContent);
+                captureContent, timeouts);
     }
 
     private ChatClient client(ScriptedChatModel model) {
@@ -175,6 +183,31 @@ class InsightsAdvisorTest {
             assertThat(mc.inputTokens()).isEqualTo(30);
             assertThat(mc.durationMs()).isGreaterThanOrEqualTo(200);
         });
+    }
+
+    @Test
+    void streamWhoseModelNeverReportsIsFinishedAfterStallTimeout() {
+        stallTimeout = Duration.ofMillis(200);
+        var model = new ScriptedChatModel(registry, p -> List.of(ScriptedChatModel.chunk("a"), text("b", 30, 3)))
+            .neverStop();
+        client(model).prompt().user("hi").stream().content().blockLast();
+        var turn = awaitTurn();
+        assertThat(turn.outcome()).isEqualTo(TurnOutcome.SUCCESS);
+        assertThat(turn.modelCalls()).singleElement().satisfies(mc -> assertThat(mc.inputTokens()).isEqualTo(30));
+        assertThat(meters.counter("ai.insights.turns.stalled", "application", "app").count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void turnsThatFinishNormallyAreNotCountedAsStalled() {
+        stallTimeout = Duration.ofMillis(100);
+        var model = new ScriptedChatModel(registry, p -> List.of(ScriptedChatModel.chunk("a"), text("b", 30, 3)))
+            .stopDelay(Duration.ofMillis(20));
+        client(model).prompt().user("hi").stream().content().blockLast();
+        awaitTurn();
+        sleep(Duration.ofMillis(300));
+        assertThat(turns()).hasSize(1);
+        assertThat(meters.find("ai.insights.turns.stalled").counter()).satisfiesAnyOf(
+                c -> assertThat(c).isNull(), c -> assertThat(c.count()).isZero());
     }
 
     @Test
@@ -382,5 +415,14 @@ class InsightsAdvisorTest {
         var advisor = advisor();
         assertThat(advisor.getName()).isEqualTo("ai-insights");
         assertThat(advisor.getOrder()).isEqualTo(org.springframework.core.Ordered.HIGHEST_PRECEDENCE + 100);
+    }
+
+    private static void sleep(Duration d) {
+        try {
+            Thread.sleep(d);
+        }
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

@@ -155,6 +155,29 @@ class TurnRecorderTest {
     }
 
     @Test
+    void forceFinishRunsPendingFinishOnce() {
+        var r = recorder();
+        var sink = new java.util.ArrayList<ConversationTurn>();
+        r.beginModelCall();
+        assertThat(r.finishWhenIdle(TurnOutcome.SUCCESS, null, List.of(), 10 * MS, rec -> { }, sink::add)).isTrue();
+        assertThat(sink).isEmpty();
+        assertThat(r.forceFinish()).isTrue();
+        assertThat(sink).hasSize(1);
+        r.endModelCall();
+        assertThat(sink).hasSize(1);
+        assertThat(r.forceFinish()).isFalse();
+    }
+
+    @Test
+    void finishWhenIdleReturnsFalseWhenNothingOpen() {
+        var r = recorder();
+        var sink = new java.util.ArrayList<ConversationTurn>();
+        assertThat(r.finishWhenIdle(TurnOutcome.SUCCESS, null, List.of(), 10 * MS, rec -> { }, sink::add)).isFalse();
+        assertThat(sink).hasSize(1);
+        assertThat(r.forceFinish()).isFalse();
+    }
+
+    @Test
     void finishWhenIdleRunsBeforeFinishThenSinkImmediatelyWhenIdle() {
         var r = recorder();
         var sink = new java.util.ArrayList<ConversationTurn>();

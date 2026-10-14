@@ -64,6 +64,11 @@ public final class InsightsMetrics {
         registry.counter("ai.insights.store.errors", base).increment();
     }
 
+    /** A turn was finished by the stall timeout because a model call never reported back. */
+    public void turnStalled() {
+        registry.counter("ai.insights.turns.stalled", base).increment();
+    }
+
     public void internalError() {
         registry.counter("ai.insights.internal.errors", base).increment();
     }

@@ -11,6 +11,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.github.springaiinsights.ScriptedChatModel;
 import io.github.springaiinsights.capture.InsightsAdvisor;
 import io.github.springaiinsights.capture.InsightsObservationHandler;
+import io.github.springaiinsights.capture.TurnTimeouts;
 import io.github.springaiinsights.identity.InsightsIdentity;
 import io.github.springaiinsights.identity.InsightsIdentityResolver;
 import io.github.springaiinsights.identity.Pseudonymiser;
@@ -59,6 +60,24 @@ class InsightsAutoConfigurationTest {
             assertThat(context.getBean(InsightsEventStore.class)).isInstanceOf(InMemoryEventStore.class);
             assertThat(context.getBean(PriceCatalog.class).currency()).isEqualTo("USD");
         });
+    }
+
+    @Test
+    void stallTimeoutBinds() {
+        runner.withPropertyValues("ai-insights.capture.stall-timeout=5s").run(context -> {
+            assertThat(context).hasSingleBean(TurnTimeouts.class);
+            assertThat(context.getBean(InsightsProperties.class).getCapture().getStallTimeout())
+                .isEqualTo(java.time.Duration.ofSeconds(5));
+        });
+    }
+
+    @Test
+    void nonPositiveStallTimeoutFailsStartup() {
+        runner.withPropertyValues("ai-insights.capture.stall-timeout=0s")
+            .run(context -> assertThat(context).hasFailed()
+                .getFailure()
+                .rootCause()
+                .hasMessageContaining("stallTimeout must be positive"));
     }
 
     @Test

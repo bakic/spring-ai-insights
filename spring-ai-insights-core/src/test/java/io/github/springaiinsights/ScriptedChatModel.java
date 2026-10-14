@@ -41,6 +41,8 @@ public final class ScriptedChatModel implements ChatModel {
 
     private volatile Duration stopDelay = Duration.ZERO;
 
+    private volatile boolean neverStop;
+
     public ScriptedChatModel(ObservationRegistry registry, Function<Prompt, List<ChatResponse>> script) {
         this.registry = registry;
         this.script = script;
@@ -54,6 +56,12 @@ public final class ScriptedChatModel implements ChatModel {
     /** Delays the stream observation stop, reproducing a provider that reports after the stream has ended. */
     public ScriptedChatModel stopDelay(Duration delay) {
         this.stopDelay = delay;
+        return this;
+    }
+
+    /** The stream observation is never stopped, reproducing a provider that never reports back. */
+    public ScriptedChatModel neverStop() {
+        this.neverStop = true;
         return this;
     }
 
@@ -119,6 +127,9 @@ public final class ScriptedChatModel implements ChatModel {
             }
             Flux<ChatResponse> flux = chunks.doOnError(observation::error)
                 .doFinally(s -> {
+                    if (neverStop) {
+                        return;
+                    }
                     sleep(stopDelay);
                     observation.stop();
                 })
