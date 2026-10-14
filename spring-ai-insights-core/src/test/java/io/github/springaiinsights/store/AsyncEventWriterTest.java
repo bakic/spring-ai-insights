@@ -35,6 +35,53 @@ class AsyncEventWriterTest {
     }
 
     @Test
+    void pendingUntilSaved() throws InterruptedException {
+        var saving = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var saved = new InMemoryEventStore(100);
+        InsightsEventStore slow = new DelegatingStore(saved) {
+            @Override
+            public void save(ConversationTurn t) {
+                saving.countDown();
+                try {
+                    release.await(5, TimeUnit.SECONDS);
+                }
+                catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                super.save(t);
+            }
+        };
+        try (var w = new AsyncEventWriter(slow, 10, metrics)) {
+            w.submit(turn("t1"));
+            assertThat(saving.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(w.pending("t1")).map(ConversationTurn::turnId).contains("t1");
+            assertThat(w.pending("other")).isEmpty();
+            release.countDown();
+        }
+        assertThat(saved.findTurn("t1")).isPresent();
+    }
+
+    @Test
+    void pendingEmptyAfterSaveOrFailure() {
+        InsightsEventStore failing = new DelegatingStore(new InMemoryEventStore(10)) {
+            @Override
+            public void save(ConversationTurn t) {
+                if (t.turnId().equals("bad")) {
+                    throw new IllegalStateException("db down");
+                }
+                super.save(t);
+            }
+        };
+        var w = new AsyncEventWriter(failing, 10, metrics);
+        w.submit(turn("ok"));
+        w.submit(turn("bad"));
+        w.close();
+        assertThat(w.pending("ok")).isEmpty();
+        assertThat(w.pending("bad")).isEmpty();
+    }
+
+    @Test
     void writerSurvivesStoreFailure() {
         var calls = new AtomicInteger();
         var saved = new InMemoryEventStore(100);

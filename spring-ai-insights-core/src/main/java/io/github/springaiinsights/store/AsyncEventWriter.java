@@ -1,7 +1,10 @@
 package io.github.springaiinsights.store;
 
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -28,6 +31,8 @@ public final class AsyncEventWriter implements AutoCloseable {
 
     private final BlockingQueue<ConversationTurn> queue;
 
+    private final Map<String, ConversationTurn> pending = new ConcurrentHashMap<>();
+
     private final Thread worker;
 
     private final AtomicLong lastWarnNanos = new AtomicLong(System.nanoTime() - WARN_INTERVAL_NANOS);
@@ -44,11 +49,22 @@ public final class AsyncEventWriter implements AutoCloseable {
     }
 
     public boolean submit(ConversationTurn turn) {
-        if (!running || !queue.offer(turn)) {
+        if (!running) {
+            metrics.eventDropped();
+            return false;
+        }
+        pending.put(turn.turnId(), turn);
+        if (!queue.offer(turn)) {
+            pending.remove(turn.turnId(), turn);
             metrics.eventDropped();
             return false;
         }
         return true;
+    }
+
+    /** A turn that was accepted but whose save has not finished yet. */
+    public Optional<ConversationTurn> pending(String turnId) {
+        return Optional.ofNullable(pending.get(turnId));
     }
 
     private void drain() {
@@ -81,6 +97,9 @@ public final class AsyncEventWriter implements AutoCloseable {
             if (now - last >= WARN_INTERVAL_NANOS && lastWarnNanos.compareAndSet(last, now)) {
                 log.warn("ai-insights: failed to save turn " + turn.turnId() + "; insights data is being lost", e);
             }
+        }
+        finally {
+            pending.remove(turn.turnId(), turn);
         }
     }
 

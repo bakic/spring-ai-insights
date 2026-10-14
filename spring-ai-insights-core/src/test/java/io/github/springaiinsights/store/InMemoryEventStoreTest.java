@@ -3,6 +3,8 @@ package io.github.springaiinsights.store;
 import java.time.Instant;
 
 import io.github.springaiinsights.TestTurns;
+import io.github.springaiinsights.feedback.Feedback;
+import io.github.springaiinsights.feedback.Rating;
 import io.github.springaiinsights.model.ConversationTurn;
 import org.junit.jupiter.api.Test;
 
@@ -26,6 +28,16 @@ class InMemoryEventStoreTest {
         assertThat(store.findTurn("t1")).isEmpty();
         assertThat(store.findTurn("t2")).isPresent();
         assertThat(store.findTurn("t3")).isPresent();
+    }
+
+    @Test
+    void feedbackIsBoundedOldestFirstOut() {
+        var store = new InMemoryEventStore(2);
+        for (String id : new String[] { "t1", "t2", "t1", "t3" }) {
+            store.saveFeedback(new Feedback(id, "a", "c", null, null, Rating.UP, null, T0));
+        }
+        assertThat(store.conversationFeedback("a", "c")).extracting(Feedback::turnId)
+            .containsExactlyInAnyOrder("t2", "t3");
     }
 
     @Test

@@ -28,6 +28,8 @@ import io.github.springaiinsights.analytics.TimeBucket;
 import io.github.springaiinsights.analytics.ToolUsage;
 import io.github.springaiinsights.analytics.UsageSummary;
 import io.github.springaiinsights.analytics.UserUsage;
+import io.github.springaiinsights.feedback.Feedback;
+import io.github.springaiinsights.feedback.FeedbackStore;
 import io.github.springaiinsights.model.ConversationTurn;
 import io.github.springaiinsights.model.ModelCall;
 import io.github.springaiinsights.model.RetrievalRecord;
@@ -35,14 +37,21 @@ import io.github.springaiinsights.model.ToolCallRecord;
 import io.github.springaiinsights.model.ToolOutcome;
 import io.github.springaiinsights.model.TurnOutcome;
 
-/** Bounded, process-local store. Evicts the oldest saved turn when full. Data is lost on restart. */
-public final class InMemoryEventStore implements InsightsEventStore, InsightsAnalytics {
+/**
+ * Bounded, process-local store. Keeps at most {@code maxTurns} turns and as many feedback entries, evicting the
+ * oldest saved first. Data is lost on restart.
+ */
+public final class InMemoryEventStore implements InsightsEventStore, FeedbackStore, InsightsAnalytics {
 
     private final int maxTurns;
 
     private final Map<String, ConversationTurn> turns = new ConcurrentHashMap<>();
 
     private final ConcurrentLinkedDeque<String> order = new ConcurrentLinkedDeque<>();
+
+    private final Map<String, Feedback> feedback = new ConcurrentHashMap<>();
+
+    private final ConcurrentLinkedDeque<String> feedbackOrder = new ConcurrentLinkedDeque<>();
 
     public InMemoryEventStore(int maxTurns) {
         if (maxTurns < 1) {
@@ -62,6 +71,20 @@ public final class InMemoryEventStore implements InsightsEventStore, InsightsAna
                 break;
             }
             turns.remove(oldest);
+        }
+    }
+
+    @Override
+    public void saveFeedback(Feedback entry) {
+        if (feedback.put(entry.turnId(), entry) == null) {
+            feedbackOrder.addLast(entry.turnId());
+        }
+        while (feedback.size() > maxTurns) {
+            String oldest = feedbackOrder.pollFirst();
+            if (oldest == null) {
+                break;
+            }
+            feedback.remove(oldest);
         }
     }
 
@@ -214,6 +237,13 @@ public final class InMemoryEventStore implements InsightsEventStore, InsightsAna
             .filter(t -> t.application().equals(application) && t.conversationId().equals(conversationId))
             .sorted(Comparator.comparing(ConversationTurn::startedAt))
             .limit(MAX_CONVERSATION_TURNS)
+            .toList();
+    }
+
+    public List<Feedback> conversationFeedback(String application, String conversationId) {
+        return feedback.values().stream()
+            .filter(f -> f.application().equals(application) && f.conversationId().equals(conversationId))
+            .sorted(Comparator.comparing(Feedback::createdAt).thenComparing(Feedback::turnId))
             .toList();
     }
 
