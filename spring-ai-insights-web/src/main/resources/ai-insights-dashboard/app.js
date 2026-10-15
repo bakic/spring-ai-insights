@@ -97,6 +97,11 @@
     return Number(value) >= 1 ? moneyCoarse.format(value) : moneyFine.format(Number(Number(value).toPrecision(2)));
   }
 
+  // Headline figures: two significant digits below one unit, so a small cost stays readable at a glance.
+  function moneyHeadline(value) {
+    return value === null || value === undefined ? '—' : moneyAxis(value);
+  }
+
   function count(n) {
     return integer.format(n);
   }
@@ -352,7 +357,7 @@
         { label: 'Conversations', value: count(now.conversations), delta: delta(now.conversations, before.conversations, 'neutral') },
         { label: 'Active users', value: count(now.activeUsers), delta: delta(now.activeUsers, before.activeUsers, 'up-is-good') },
         {
-          label: 'Cost', value: money(now.cost), delta: delta(Number(now.cost), Number(before.cost), 'neutral'),
+          label: 'Cost', value: moneyHeadline(now.cost), delta: delta(Number(now.cost), Number(before.cost), 'neutral'),
           hint: now.unpricedTurns ? `${count(now.unpricedTurns)} turns have no price` : null
         },
         {
@@ -412,11 +417,11 @@
     return [
       pageHead('Cost', `What the assistant cost ${PERIOD_TEXT[state.period]}, and where the month is heading.`),
       ledger([
-        { label: 'Cost in period', value: money(data.total) },
-        { label: 'Per conversation', value: money(data.perConversation) },
-        { label: 'This month so far', value: money(data.monthToDate), hint: 'calendar month, all periods' },
+        { label: 'Cost in period', value: moneyHeadline(data.total) },
+        { label: 'Per conversation', value: moneyHeadline(data.perConversation) },
+        { label: 'This month so far', value: moneyHeadline(data.monthToDate), hint: 'calendar month, all periods' },
         {
-          label: 'Month-end projection', value: money(data.monthEndProjection),
+          label: 'Month-end projection', value: moneyHeadline(data.monthEndProjection),
           hint: data.monthEndProjection === null ? 'available after the first day of the month' : 'at the current pace'
         },
         {
