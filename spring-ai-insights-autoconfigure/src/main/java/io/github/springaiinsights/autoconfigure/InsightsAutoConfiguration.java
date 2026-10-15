@@ -6,6 +6,7 @@ import java.util.List;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
+import io.micrometer.tracing.Tracer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -134,10 +135,16 @@ public class InsightsAutoConfiguration {
     InsightsAdvisor insightsAdvisor(ObjectProvider<ObservationRegistry> observationRegistry,
             InsightsIdentityResolver identityResolver, ObjectProvider<Pseudonymiser> pseudonymiser,
             CostCalculator costs, AsyncEventWriter writer, InsightsMetrics metrics, TurnTimeouts timeouts,
-            InsightsProperties properties, Environment environment) {
+            TraceIdSupplier traceIds, InsightsProperties properties, Environment environment) {
         return new InsightsAdvisor(observationRegistry.getIfUnique(() -> ObservationRegistry.NOOP), identityResolver,
                 pseudonymiser.getIfAvailable(), costs, writer, metrics, application(properties, environment),
-                properties.isCaptureContent(), timeouts, TraceIdSupplier.NONE);
+                properties.isCaptureContent(), timeouts, traceIds);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    TraceIdSupplier insightsTraceIdSupplier() {
+        return TraceIdSupplier.NONE;
     }
 
     @Bean
@@ -161,6 +168,18 @@ public class InsightsAutoConfiguration {
         }
         return new ModelPrice(price.getModel(), price.getInput(), price.getOutput(), price.getCacheRead(),
                 price.getCacheWrite(), price.isInputIncludesCached());
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "io.micrometer.tracing.Tracer")
+    static class TracingConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean
+        TraceIdSupplier insightsTraceIdSupplier(ObjectProvider<Tracer> tracer) {
+            Tracer unique = tracer.getIfUnique();
+            return unique == null ? TraceIdSupplier.NONE : new MicrometerTraceIdSupplier(unique);
+        }
     }
 
     @Configuration(proxyBeanMethods = false)

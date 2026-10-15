@@ -5,12 +5,15 @@ import java.util.List;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.test.simple.SimpleTracer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import io.github.springaiinsights.ScriptedChatModel;
 import io.github.springaiinsights.capture.InsightsAdvisor;
 import io.github.springaiinsights.capture.InsightsObservationHandler;
+import io.github.springaiinsights.capture.TraceIdSupplier;
 import io.github.springaiinsights.knowledge.ObservedVectorStore;
 import io.github.springaiinsights.capture.TurnTimeouts;
 import io.github.springaiinsights.analytics.InsightsAnalytics;
@@ -327,6 +330,24 @@ class InsightsAutoConfigurationTest {
     void securityResolverChosenWhenSecurityPresent() {
         runner.run(context -> assertThat(context.getBean(InsightsIdentityResolver.class))
             .isInstanceOf(SpringSecurityIdentityResolver.class));
+    }
+
+    @Test
+    void tracerGivesMicrometerSupplier() {
+        runner.withBean(Tracer.class, SimpleTracer::new)
+            .run(context -> assertThat(context.getBean(TraceIdSupplier.class))
+                .isInstanceOf(MicrometerTraceIdSupplier.class));
+    }
+
+    @Test
+    void noTracerGivesNone() {
+        runner.run(context -> assertThat(context.getBean(TraceIdSupplier.class)).isSameAs(TraceIdSupplier.NONE));
+    }
+
+    @Test
+    void tracingAbsentFromClasspathGivesNone() {
+        runner.withClassLoader(new FilteredClassLoader(Tracer.class))
+            .run(context -> assertThat(context.getBean(TraceIdSupplier.class)).isSameAs(TraceIdSupplier.NONE));
     }
 
     @Test
