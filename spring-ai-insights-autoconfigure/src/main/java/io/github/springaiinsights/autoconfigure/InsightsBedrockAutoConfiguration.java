@@ -18,13 +18,16 @@ import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.ConditionContext;
 import org.springframework.context.annotation.Conditional;
+import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
 /**
  * Lists the documents of the configured Amazon Bedrock Knowledge Bases, so the dashboard shows those never retrieved.
- * Uses the application's {@link BedrockAgentClient} bean if there is exactly one, else builds (and closes) its own.
+ * Uses the application's {@link BedrockAgentClient} bean if there is exactly one, else builds (and closes) its own in
+ * {@code ai-insights.knowledge.bedrock.region}, else {@code spring.ai.bedrock.aws.region}, else the AWS SDK default
+ * region. The client is created at the first refresh, so a missing region or credentials never fails startup.
  */
 @AutoConfiguration
 @ConditionalOnClass(name = { "io.github.springaiinsights.bedrock.BedrockKnowledgeBaseCatalog",
@@ -39,10 +42,12 @@ public class InsightsBedrockAutoConfiguration implements DisposableBean {
     @Bean(destroyMethod = "close")
     @ConditionalOnMissingBean
     BedrockKnowledgeBaseCatalog insightsBedrockKnowledgeBaseCatalog(ObjectProvider<BedrockAgentClient> clients,
-            InsightsProperties properties) {
+            InsightsProperties properties, Environment environment) {
         InsightsProperties.Knowledge.Bedrock bedrock = properties.getKnowledge().getBedrock();
-        BedrockAgentClient client = clients.getIfUnique(() -> ownClient(bedrock.getRegion()));
-        BedrockKnowledgeBaseCatalog catalog = new BedrockKnowledgeBaseCatalog(client,
+        String region = bedrock.getRegion() != null && !bedrock.getRegion().isBlank() ? bedrock.getRegion()
+                : environment.getProperty("spring.ai.bedrock.aws.region");
+        BedrockKnowledgeBaseCatalog catalog = new BedrockKnowledgeBaseCatalog(
+                () -> clients.getIfUnique(() -> ownClient(region)),
                 bedrock.getKnowledgeBaseIds().stream().filter(id -> !id.isBlank()).map(String::strip).toList(),
                 bedrock.getRefresh());
         catalog.start();

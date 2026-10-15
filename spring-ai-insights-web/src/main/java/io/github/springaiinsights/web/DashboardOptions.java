@@ -2,6 +2,7 @@ package io.github.springaiinsights.web;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import io.github.springaiinsights.knowledge.KnowledgeCorpusCatalog;
 import org.jspecify.annotations.Nullable;
@@ -18,10 +19,15 @@ public record DashboardOptions(List<KnowledgeCorpusCatalog> catalogs, Duration a
 
     public static final DashboardOptions DEFAULTS = new DashboardOptions(List.of(), Duration.ofMinutes(30), null);
 
+    private static final Pattern TRACE_URL = Pattern.compile("^https?://[^\\s\"'<>]+$");
+
     public DashboardOptions {
         catalogs = List.copyOf(catalogs);
         if (abandonedAfter.compareTo(Duration.ofMinutes(1)) < 0) {
             throw new IllegalArgumentException("abandoned-after must be at least 1 minute: " + abandonedAfter);
+        }
+        if (traceUrl != null && (!TRACE_URL.matcher(traceUrl).matches() || !traceUrl.contains("{traceId}"))) {
+            throw new IllegalArgumentException("trace URL must be an http(s) URL containing {traceId}: " + traceUrl);
         }
     }
 }

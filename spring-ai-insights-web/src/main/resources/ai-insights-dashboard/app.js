@@ -538,7 +538,7 @@
       section('Never called in this period', 'Tools offered to the model that it did not call once.',
         data.neverCalled.length
           ? el('ul', { class: 'ids' }, data.neverCalled.map((name) => el('li', { text: name })))
-          : empty(data.tools.length ? 'All offered tools were called.' : 'No tool was offered in this period.'))
+          : empty(data.offeredRecorded ? 'All offered tools were called.' : 'No offered tools recorded in this period.'))
     ];
   }
 

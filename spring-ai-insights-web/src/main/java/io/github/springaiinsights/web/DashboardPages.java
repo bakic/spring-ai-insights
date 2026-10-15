@@ -156,9 +156,10 @@ public final class DashboardPages {
 
     public ToolsPage tools(InsightsFilter filter) {
         List<ToolUsage> tools = analytics.tools(filter);
-        Set<String> neverCalled = new TreeSet<>(analytics.offeredTools(filter));
+        List<String> offered = analytics.offeredTools(filter);
+        Set<String> neverCalled = new TreeSet<>(offered);
         tools.forEach(tool -> neverCalled.remove(tool.tool()));
-        return new ToolsPage(tools, List.copyOf(neverCalled));
+        return new ToolsPage(tools, List.copyOf(neverCalled), !offered.isEmpty());
     }
 
     public QualityPage quality(InsightsFilter filter) {

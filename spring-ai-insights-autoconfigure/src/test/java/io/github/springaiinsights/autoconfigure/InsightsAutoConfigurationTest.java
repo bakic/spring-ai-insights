@@ -116,6 +116,71 @@ class InsightsAutoConfigurationTest {
             .run(context -> assertThat(context.getBean("kb")).isInstanceOf(PlainStore.class));
     }
 
+    @Test
+    void storeInjectedByItsClassKeepsItsTypeAndIsObserved() {
+        List<String> observed = new java.util.concurrent.CopyOnWriteArrayList<>();
+        ObservationRegistry registry = ObservationRegistry.create();
+        registry.observationConfig().observationHandler(new io.micrometer.observation.ObservationHandler<>() {
+            @Override
+            public boolean supportsContext(io.micrometer.observation.Observation.Context context) {
+                return context instanceof org.springframework.ai.vectorstore.observation.VectorStoreObservationContext;
+            }
+
+            @Override
+            public void onStop(io.micrometer.observation.Observation.Context context) {
+                observed.add(((org.springframework.ai.vectorstore.observation.VectorStoreObservationContext) context)
+                    .getQueryRequest()
+                    .getQuery());
+            }
+        });
+        new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(InsightsAutoConfiguration.class))
+            .withBean(SimpleMeterRegistry.class)
+            .withBean(ObservationRegistry.class, () -> registry)
+            .withBean("kb", OpenStore.class, OpenStore::new)
+            .withBean(StoreUser.class)
+            .run(context -> {
+                assertThat(context).hasNotFailed();
+                OpenStore store = context.getBean(StoreUser.class).store;
+                assertThat(store.extra()).isEqualTo("extra");
+                store.similaritySearch(SearchRequest.builder().query("by request").build());
+                store.similaritySearch("by text");
+                assertThat(observed).containsExactly("by request", "by text");
+            });
+    }
+
+    static class OpenStore implements VectorStore {
+
+        String extra() {
+            return "extra";
+        }
+
+        @Override
+        public void add(List<Document> documents) {
+        }
+
+        @Override
+        public void delete(List<String> idList) {
+        }
+
+        @Override
+        public void delete(Filter.Expression filterExpression) {
+        }
+
+        @Override
+        public List<Document> similaritySearch(SearchRequest request) {
+            return List.of();
+        }
+    }
+
+    static class StoreUser {
+
+        final OpenStore store;
+
+        StoreUser(OpenStore store) {
+            this.store = store;
+        }
+    }
+
     static final class PlainStore implements VectorStore {
 
         @Override

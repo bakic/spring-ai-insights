@@ -269,7 +269,8 @@ public final class MongoEventStore implements InsightsEventStore, FeedbackStore,
     }
 
     private long p95(InsightsFilter filter, String tool, long calls) {
-        List<Document> ranked = aggregate(List.of(match(filter), new Document("$unwind", "$toolCalls"),
+        List<Document> ranked = aggregate(List.of(match(filter),
+                new Document("$match", new Document("toolCalls.name", tool)), new Document("$unwind", "$toolCalls"),
                 new Document("$match", new Document("toolCalls.name", tool)),
                 new Document("$sort", new Document("toolCalls.durationMs", 1)),
                 new Document("$skip", ToolUsage.p95Index(calls)), new Document("$limit", 1),

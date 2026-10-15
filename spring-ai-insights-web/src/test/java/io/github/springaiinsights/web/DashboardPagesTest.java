@@ -165,6 +165,7 @@ class DashboardPagesTest {
     @Test
     void toolsNeverCalled() {
         assertThat(pages().tools(SHOP).neverCalled()).containsExactly("search");
+        assertThat(pages().tools(SHOP).offeredRecorded()).isTrue();
     }
 
     @Test
@@ -222,6 +223,12 @@ class DashboardPagesTest {
         org.assertj.core.api.Assertions
             .assertThatIllegalArgumentException()
             .isThrownBy(() -> new DashboardOptions(List.of(), Duration.ofSeconds(59), null));
+        org.assertj.core.api.Assertions
+            .assertThatIllegalArgumentException()
+            .isThrownBy(() -> new DashboardOptions(List.of(), Duration.ofMinutes(30), "javascript:alert({traceId})"));
+        org.assertj.core.api.Assertions
+            .assertThatIllegalArgumentException()
+            .isThrownBy(() -> new DashboardOptions(List.of(), Duration.ofMinutes(30), "https://tempo.example.com/"));
     }
 
     private DashboardPages pages(Instant now, KnowledgeCorpusCatalog... catalogs) {

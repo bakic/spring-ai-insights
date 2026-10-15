@@ -32,7 +32,7 @@ class BedrockKnowledgeBaseCatalogTest {
 
         @Override
         public ListDataSourcesResponse listDataSources(ListDataSourcesRequest request) {
-            if (failing.get()) {
+            if (failing.get() || request.knowledgeBaseId().equals("BAD")) {
                 throw SdkClientException.create("no network");
             }
             assertThat(request.knowledgeBaseId()).isEqualTo("KB1");
@@ -103,6 +103,28 @@ class BedrockKnowledgeBaseCatalogTest {
             assertThat(r.knowledgeBaseId()).isEqualTo("KB1");
             assertThat(r.maxResults()).isEqualTo(1000);
         });
+    }
+
+    @Test
+    void oneFailingKnowledgeBaseDoesNotHideTheOthers() {
+        var catalog = new BedrockKnowledgeBaseCatalog(client, List.of("BAD", "KB1"), Duration.ofHours(1));
+        catalog.refresh();
+        assertThat(catalog.documentIds()).containsExactlyInAnyOrder("s3://kb/a.pdf", "s3://kb/b.pdf", "doc-42");
+    }
+
+    @Test
+    void clientCreationFailureIsRetriedAtTheNextRefresh() {
+        AtomicBoolean created = new AtomicBoolean();
+        var catalog = new BedrockKnowledgeBaseCatalog(() -> {
+            if (!created.getAndSet(true)) {
+                throw SdkClientException.create("Unable to load region");
+            }
+            return client;
+        }, List.of("KB1"), Duration.ofHours(1));
+        catalog.refresh();
+        assertThat(catalog.documentIds()).isNull();
+        catalog.refresh();
+        assertThat(catalog.documentIds()).hasSize(3);
     }
 
     @Test

@@ -2,6 +2,8 @@ package io.github.springaiinsights.autoconfigure;
 
 import io.github.springaiinsights.bedrock.BedrockKnowledgeBaseCatalog;
 import io.github.springaiinsights.knowledge.KnowledgeCorpusCatalog;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.services.bedrockagent.BedrockAgentClient;
 import software.amazon.awssdk.services.bedrockagent.model.ListDataSourcesRequest;
@@ -17,6 +19,17 @@ class InsightsBedrockAutoConfigurationTest {
 
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
         .withConfiguration(AutoConfigurations.of(InsightsBedrockAutoConfiguration.class));
+
+    /** Any call from a client built by the auto-configuration is refused locally instead of reaching AWS. */
+    @BeforeEach
+    void noRealAws() {
+        System.setProperty("aws.endpointUrl", "http://127.0.0.1:9");
+    }
+
+    @AfterEach
+    void restore() {
+        System.clearProperty("aws.endpointUrl");
+    }
 
     private static BedrockAgentClient emptyClient() {
         return new BedrockAgentClient() {
@@ -54,6 +67,28 @@ class InsightsBedrockAutoConfigurationTest {
                 assertThat(context).hasSingleBean(BedrockKnowledgeBaseCatalog.class);
                 assertThat(context).doesNotHaveBean(BedrockAgentClient.class);
             });
+    }
+
+    @Test
+    void missingRegionDoesNotFailStartup() {
+        String region = System.getProperty("aws.region");
+        System.setProperty("aws.region", "");
+        try {
+            runner.withPropertyValues("ai-insights.knowledge.bedrock.knowledge-base-ids=KB1").run(context -> {
+                assertThat(context).hasNotFailed();
+                BedrockKnowledgeBaseCatalog catalog = context.getBean(BedrockKnowledgeBaseCatalog.class);
+                catalog.refresh();
+                assertThat(catalog.documentIds()).isNull();
+            });
+        }
+        finally {
+            if (region == null) {
+                System.clearProperty("aws.region");
+            }
+            else {
+                System.setProperty("aws.region", region);
+            }
+        }
     }
 
     @Test
