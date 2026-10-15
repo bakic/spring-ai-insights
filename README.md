@@ -128,6 +128,8 @@ To run it against a real model, add a Spring AI model starter to `demo/build.gra
 `org.springframework.ai:spring-ai-starter-model-openai` with `spring.ai.openai.api-key`), delete
 `SimulatedChatModel.java`, and set `demo.traffic.enabled=false` unless you want to pay for the generated
 questions. Pricing for `gpt-4o` and `gpt-4o-mini` is already configured in `demo/src/main/resources/application.yml`.
+The demo's tests rely on the simulated model, so once it is gone build with
+`./gradlew build -x :spring-ai-insights-demo:test` (or delete `demo/src/test`).
 
 ## Passing context
 
