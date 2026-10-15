@@ -20,6 +20,8 @@ final class MongoIndexes {
 
     static final String FEEDBACK_TTL_INDEX = "ttl_createdAt";
 
+    static final String LOCK_TTL_INDEX = "ttl_expiresAt";
+
     private static final int INDEX_OPTIONS_CONFLICT = 85;
 
     private static final int INDEX_KEY_SPECS_CONFLICT = 86;
@@ -27,7 +29,8 @@ final class MongoIndexes {
     private MongoIndexes() {
     }
 
-    static void ensure(MongoCollection<Document> turns, MongoCollection<Document> feedback, Duration retention,
+    static void ensure(MongoCollection<Document> turns, MongoCollection<Document> feedback,
+            MongoCollection<Document> locks, Duration retention,
             Consumer<Document> runCommand) {
         turns.createIndex(Indexes.compoundIndex(Indexes.ascending("application"), Indexes.descending("startedAt")),
                 new IndexOptions().name("application_startedAt"));
@@ -45,6 +48,7 @@ final class MongoIndexes {
         feedback.createIndex(Indexes.ascending("application", "conversationId"),
                 new IndexOptions().name("application_conversationId"));
         ttl(feedback, "createdAt", FEEDBACK_TTL_INDEX, retention, runCommand);
+        ttl(locks, "expiresAt", LOCK_TTL_INDEX, Duration.ZERO, runCommand);
     }
 
     private static void ttl(MongoCollection<Document> collection, String field, String name, Duration retention,
