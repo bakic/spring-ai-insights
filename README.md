@@ -410,5 +410,5 @@ See the [observability guide](docs/opentelemetry.md) for the configuration of ea
 
 ## Roadmap
 
-- **Release**: a demo application, continuous integration and the first Maven Central release.
+- **Release**: the first Maven Central release. Publishing is set up; see [RELEASING.md](RELEASING.md).
 - A dashboard for WebFlux applications.
