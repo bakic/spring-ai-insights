@@ -96,6 +96,39 @@ Requirements: Java 21, Spring Boot 4.1, Spring AI 2.0.
    }
    ```
 
+## Try the demo
+
+The repository has a helpdesk assistant that uses the starter: a help center searched with
+`QuestionAnswerAdvisor`, three tools (`lookupOrder`, `serviceStatus`, `openTicket`), streaming, and
+feedback. Answers are simulated, so it needs no API key and costs nothing. Twelve simulated customers
+send it questions every two seconds, so the dashboard fills up within a minute.
+
+```bash
+./gradlew :spring-ai-insights-demo:run
+```
+
+Open <http://localhost:8080/ai-insights/> and sign in as `admin` / `admin`. To ask a question yourself:
+
+```bash
+curl -u alice:alice -H 'Content-Type: application/json' \
+  -d '{"conversationId":"c1","question":"Where is my order #10423?"}' \
+  localhost:8080/api/chat
+```
+
+The answer includes a `turnId`. Your turn appears on the dashboard next to the generated traffic.
+Prometheus metrics are at <http://localhost:8080/actuator/prometheus>.
+
+![Overview page of the demo](docs/images/demo-overview.png)
+
+The other pages: [usage](docs/images/demo-usage.png), [cost](docs/images/demo-cost.png),
+[knowledge base](docs/images/demo-knowledge.png), [tools](docs/images/demo-tools.png),
+[quality](docs/images/demo-quality.png) and [one conversation](docs/images/demo-conversation.png).
+
+To run it against a real model, add a Spring AI model starter to `demo/build.gradle.kts` (for example
+`org.springframework.ai:spring-ai-starter-model-openai` with `spring.ai.openai.api-key`), delete
+`SimulatedChatModel.java`, and set `demo.traffic.enabled=false` unless you want to pay for the generated
+questions. Pricing for `gpt-4o` and `gpt-4o-mini` is already configured in `demo/src/main/resources/application.yml`.
+
 ## Passing context
 
 ```java
