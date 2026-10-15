@@ -14,7 +14,8 @@ Every `ChatClient` call (blocking or streaming) becomes a `ConversationTurn`:
 - **who**: user ID (pseudonymised by default) and tenant, from Spring Security or advisor params
 - **conversation**: conversation ID, outcome (`SUCCESS`, `ERROR`, `CANCELLED`), latency, time to first token, finish reasons
 - **model calls**: provider, model, input / output / cache-read / cache-write tokens, cost per call
-- **tool calls**: name, duration, outcome; **retrievals**: vector store, top-k, result count, scores, document IDs
+- **tool calls**: name, duration, outcome (a tool that throws is a failed call, even when Spring AI passes the
+  error message back to the model); **retrievals**: vector store, top-k, result count, scores, document IDs
 - **cost**: total cost of the turn in your configured currency
 - **your attributes**: any key you pass as an advisor param (feature, channel, A/B variant…)
 

@@ -26,6 +26,7 @@ import io.github.springaiinsights.store.InsightsEventStore;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientBuilderCustomizer;
+import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -116,6 +117,13 @@ public class InsightsAutoConfiguration {
     static ObservingVectorStorePostProcessor insightsObservingVectorStorePostProcessor(
             ObjectProvider<ObservationRegistry> observationRegistry) {
         return new ObservingVectorStorePostProcessor(observationRegistry);
+    }
+
+    @Bean
+    @ConditionalOnClass(ToolExecutionExceptionProcessor.class)
+    static ToolErrorRecordingPostProcessor insightsToolErrorRecordingPostProcessor(
+            ObjectProvider<ObservationRegistry> observationRegistry) {
+        return new ToolErrorRecordingPostProcessor(observationRegistry);
     }
 
     @Bean

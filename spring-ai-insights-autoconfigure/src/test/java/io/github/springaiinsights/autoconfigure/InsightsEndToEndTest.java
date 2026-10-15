@@ -24,6 +24,7 @@ import io.github.springaiinsights.identity.Pseudonymiser;
 import io.github.springaiinsights.model.ConversationTurn;
 import io.github.springaiinsights.model.ModelCall;
 import io.github.springaiinsights.model.ToolCallRecord;
+import io.github.springaiinsights.model.ToolOutcome;
 import io.github.springaiinsights.store.InMemoryEventStore;
 import io.github.springaiinsights.store.InsightsEventStore;
 import io.github.springaiinsights.store.TurnQuery;
@@ -94,6 +95,18 @@ class InsightsEndToEndTest {
         });
         assertThat(turn.modelCalls()).hasSize(2).extracting(ModelCall::provider).containsOnly("scripted");
         await().atMost(Duration.ofSeconds(5)).until(() -> count("ai.insights.turns") - turnsBefore == 1);
+    }
+
+    @Test
+    void failingToolIsRecordedAsError() {
+        ChatClientResponse response = builder.build().prompt().user("use fail").tools(tools).call().chatClientResponse();
+
+        assertThat(response.chatResponse().getResult().getOutput().getText()).isEqualTo("answer");
+        assertThat(recorded(response).toolCalls()).singleElement().satisfies(call -> {
+            assertThat(call.name()).isEqualTo("fail");
+            assertThat(call.outcome()).isEqualTo(ToolOutcome.ERROR);
+            assertThat(call.errorType()).isEqualTo("IllegalStateException");
+        });
     }
 
     @Test
@@ -261,6 +274,11 @@ class InsightsEndToEndTest {
                 .stream()
                 .map(Document::getText)
                 .collect(Collectors.joining("\n"));
+        }
+
+        @Tool(description = "Always fails")
+        public String fail() {
+            throw new IllegalStateException("tool broke");
         }
 
         @Tool(description = "Tool a")
