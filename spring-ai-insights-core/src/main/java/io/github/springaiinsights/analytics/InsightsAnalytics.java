@@ -28,6 +28,9 @@ public interface InsightsAnalytics {
     /** Most called first, then by tool name. */
     List<ToolUsage> tools(InsightsFilter filter);
 
+    /** Names of the tools offered to the model on the selected turns, distinct and sorted. */
+    List<String> offeredTools(InsightsFilter filter);
+
     /** Most queried first, then by store name. */
     List<RetrievalUsage> retrievals(InsightsFilter filter);
 

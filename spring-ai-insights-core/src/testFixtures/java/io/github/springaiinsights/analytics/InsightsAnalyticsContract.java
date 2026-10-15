@@ -2,13 +2,17 @@ package io.github.springaiinsights.analytics;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 import java.util.stream.Stream;
 
 import io.github.springaiinsights.feedback.Feedback;
 import io.github.springaiinsights.feedback.FeedbackStore;
 import io.github.springaiinsights.feedback.Rating;
 import io.github.springaiinsights.model.ConversationTurn;
+import io.github.springaiinsights.model.ToolCallRecord;
+import io.github.springaiinsights.model.ToolOutcome;
 import io.github.springaiinsights.store.InsightsEventStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -233,6 +237,7 @@ public abstract class InsightsAnalyticsContract {
             assertThat(t.errors()).isZero();
             assertThat(t.turns()).isEqualTo(1);
             assertThat(t.avgDurationMs()).isCloseTo(40.0, within(1e-9));
+            assertThat(t.p95DurationMs()).isEqualTo(50);
             assertThat(t.repeatedCalls()).isEqualTo(1);
         });
         assertThat(tools.get(1)).satisfies(t -> {
@@ -240,8 +245,26 @@ public abstract class InsightsAnalyticsContract {
             assertThat(t.errors()).isEqualTo(1);
             assertThat(t.turns()).isEqualTo(1);
             assertThat(t.avgDurationMs()).isCloseTo(10.0, within(1e-9));
+            assertThat(t.p95DurationMs()).isEqualTo(10);
             assertThat(t.repeatedCalls()).isZero();
         });
+    }
+
+    @Test
+    void toolP95IsNearestRank() {
+        List<ToolCallRecord> calls = new ArrayList<>();
+        for (int duration = 20; duration >= 1; duration--) {
+            calls.add(new ToolCallRecord("t", duration, ToolOutcome.SUCCESS, null, 0));
+        }
+        store().save(ContractTurns.toolTurn("P1", "perf", "2026-10-01T10:00:00Z", "p1", calls));
+        assertThat(analytics().tools(new InsightsFilter("perf", FROM, TO, null, PARIS))).singleElement()
+            .satisfies(t -> assertThat(t.p95DurationMs()).isEqualTo(19));
+    }
+
+    @Test
+    void offeredToolsDistinctSorted() {
+        assertThat(analytics().offeredTools(SHOP)).containsExactly("lookup", "refund", "search");
+        assertThat(analytics().offeredTools(HELP)).isEmpty();
     }
 
     @Test

@@ -257,7 +257,26 @@ public final class MongoEventStore implements InsightsEventStore, FeedbackStore,
                 new Document("$group", perTool), new Document("$sort", new Document("calls", -1).append("_id", 1))))
             .stream()
             .map(d -> new ToolUsage(d.getString("_id"), number(d, "calls"), number(d, "errors"), number(d, "turns"),
-                    (double) number(d, "durationMs") / number(d, "calls"), number(d, "repeatedCalls")))
+                    (double) number(d, "durationMs") / number(d, "calls"),
+                    p95(filter, d.getString("_id"), number(d, "calls")), number(d, "repeatedCalls")))
+            .toList();
+    }
+
+    private long p95(InsightsFilter filter, String tool, long calls) {
+        List<Document> ranked = aggregate(List.of(match(filter), new Document("$unwind", "$toolCalls"),
+                new Document("$match", new Document("toolCalls.name", tool)),
+                new Document("$sort", new Document("toolCalls.durationMs", 1)),
+                new Document("$skip", ToolUsage.p95Index(calls)), new Document("$limit", 1),
+                new Document("$project", new Document("_id", 0).append("durationMs", "$toolCalls.durationMs"))));
+        return ranked.isEmpty() ? 0 : number(ranked.get(0), "durationMs");
+    }
+
+    @Override
+    public List<String> offeredTools(InsightsFilter filter) {
+        return aggregate(List.of(match(filter), new Document("$unwind", "$offeredTools"),
+                new Document("$group", new Document("_id", "$offeredTools")), new Document("$sort", new Document("_id", 1))))
+            .stream()
+            .map(d -> d.getString("_id"))
             .toList();
     }
 

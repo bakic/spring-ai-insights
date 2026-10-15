@@ -182,10 +182,20 @@ public final class InMemoryEventStore implements InsightsEventStore, FeedbackSto
                         calls.stream().filter(c -> c.outcome() == ToolOutcome.ERROR).count(),
                         turnsByTool.get(e.getKey()).size(),
                         calls.stream().mapToLong(ToolCallRecord::durationMs).average().orElse(0),
-                        calls.stream().filter(c -> c.repeatIndex() > 0).count());
+                        p95(calls), calls.stream().filter(c -> c.repeatIndex() > 0).count());
             })
             .sorted(Comparator.comparingLong(ToolUsage::calls).reversed().thenComparing(ToolUsage::tool))
             .toList();
+    }
+
+    private static long p95(List<ToolCallRecord> calls) {
+        long[] durations = calls.stream().mapToLong(ToolCallRecord::durationMs).sorted().toArray();
+        return durations[ToolUsage.p95Index(durations.length)];
+    }
+
+    @Override
+    public List<String> offeredTools(InsightsFilter filter) {
+        return select(filter).stream().flatMap(t -> t.offeredTools().stream()).distinct().sorted().toList();
     }
 
     @Override
