@@ -53,6 +53,7 @@ class SimulatedChatModel implements ChatModel {
         return ChatModelObservationDocumentation.CHAT_MODEL_OPERATION
             .observation(null, CONVENTION, () -> context, registry)
             .observe(() -> {
+                think();
                 ChatResponse response = script.respond(prompt);
                 context.setResponse(response);
                 return response;
@@ -67,12 +68,27 @@ class SimulatedChatModel implements ChatModel {
                 .observation(null, CONVENTION, () -> context, registry);
             observation.parentObservation(contextView.getOrDefault(ObservationThreadLocalAccessor.KEY, null)).start();
             Flux<ChatResponse> flux = Flux.defer(() -> Flux.fromIterable(chunks(script.respond(prompt))))
+                .delaySubscription(thinkingTime())
                 .concatMap(chunk -> Mono.just(chunk).delayElement(Duration.ofMillis(ThreadLocalRandom.current().nextInt(15, 41))))
                 .doOnError(observation::error)
                 .doFinally(signal -> observation.stop())
                 .contextWrite(ctx -> ctx.put(ObservationThreadLocalAccessor.KEY, observation));
             return new MessageAggregator().aggregate(flux, context::setResponse);
         });
+    }
+
+    // A provider takes a few hundred milliseconds before it answers; the dashboard's latency figures need that.
+    private static Duration thinkingTime() {
+        return Duration.ofMillis(ThreadLocalRandom.current().nextInt(120, 451));
+    }
+
+    private static void think() {
+        try {
+            Thread.sleep(thinkingTime());
+        }
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /** One chunk per word; the last one carries the finish reason, the model and the usage, as providers do. */

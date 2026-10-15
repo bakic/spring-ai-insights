@@ -1,5 +1,6 @@
 package io.github.springaiinsights.demo;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -37,6 +38,10 @@ final class HelpdeskScript {
 
     private static final Pattern ORDER = Pattern.compile("(?:order\\D{0,12}|#)(\\d{3,})");
 
+    private static final Pattern OUTAGE = Pattern.compile("\\b(down|status|slow)\\b");
+
+    private static final Pattern HANDOFF = Pattern.compile("\\b(human|agent|complaint)\\b");
+
     private static final List<String> SERVICES = List.of("checkout", "login", "payments", "search", "website");
 
     ChatResponse respond(Prompt prompt) {
@@ -73,7 +78,8 @@ final class HelpdeskScript {
             return "";
         }
         int start = open + RULE.length();
-        int end = userText.indexOf("\n" + RULE, start);
+        // The renderer drops the empty line of an empty context, so the closing rule can follow the opening one.
+        int end = userText.indexOf(RULE, start);
         return (end < 0 ? userText.substring(start) : userText.substring(start, end)).strip();
     }
 
@@ -82,10 +88,10 @@ final class HelpdeskScript {
         if (ORDER.matcher(q).find()) {
             return "lookupOrder";
         }
-        if (q.contains("down") || q.contains("status") || q.contains("slow")) {
+        if (OUTAGE.matcher(q).find()) {
             return "serviceStatus";
         }
-        if (q.contains("human") || q.contains("agent") || q.contains("complaint")) {
+        if (HANDOFF.matcher(q).find()) {
             return "openTicket";
         }
         return null;
@@ -119,8 +125,12 @@ final class HelpdeskScript {
         if (context.isEmpty()) {
             return NO_ANSWER + " Ask me about orders, refunds, shipping or your account.";
         }
-        String firstParagraph = context.split("\n\\s*\n", 2)[0].strip();
-        return "From our help center: " + firstParagraph;
+        String firstParagraph = Arrays.stream(context.split("\n\\s*\n"))
+            .map(String::strip)
+            .filter(paragraph -> !paragraph.startsWith("#"))
+            .findFirst()
+            .orElse(context.strip());
+        return "From our help center: " + firstParagraph.replace('\n', ' ');
     }
 
     private static ChatResponse response(AssistantMessage message, String finishReason, String model, int inputTokens,
