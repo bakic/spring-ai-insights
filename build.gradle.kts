@@ -16,10 +16,21 @@ subprojects {
 
     val springBootVersion: String by project
     val springAiVersion: String by project
+    val awsSdkVersion: String by project
+
+    // The BOMs only pick versions inside this build. Published modules carry resolved versions instead, so
+    // adding the starter does not impose Spring Boot's or Spring AI's version catalog on an application.
+    val managedVersions = configurations.create("managedVersions") {
+        isCanBeConsumed = false
+        isCanBeResolved = false
+    }
+    configurations.matching { it.name.endsWith("Classpath") || it.name.endsWith("nnotationProcessor") }
+        .configureEach { extendsFrom(managedVersions) }
 
     dependencies {
-        "api"(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
-        "api"(platform("org.springframework.ai:spring-ai-bom:$springAiVersion"))
+        "managedVersions"(platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
+        "managedVersions"(platform("org.springframework.ai:spring-ai-bom:$springAiVersion"))
+        "managedVersions"(platform("software.amazon.awssdk:bom:$awsSdkVersion"))
         "testImplementation"("org.springframework.boot:spring-boot-starter-test")
         "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
     }
@@ -83,6 +94,12 @@ configure(subprojects.filter { it.name in publishedModules }) {
     }
 
     configure<PublishingExtension> {
+        publications.withType<MavenPublication>().configureEach {
+            versionMapping {
+                usage("java-api") { fromResolutionOf("compileClasspath") }
+                usage("java-runtime") { fromResolutionResult() }
+            }
+        }
         repositories {
             maven {
                 name = "staging"
@@ -112,8 +129,9 @@ tasks.register("verifyPublication") {
     val repo = stagingRepo
     val modules = publishedModules
     val projectVersion = version.toString()
+    val groupPath = project.group.toString().replace('.', '/')
     doLast {
-        val root = repo.get().asFile.resolve("io/github/springaiinsights")
+        val root = repo.get().asFile.resolve(groupPath)
         val errors = mutableListOf<String>()
         val unexpected = (root.list() ?: emptyArray()).filter { it !in modules }
         if (unexpected.isNotEmpty()) errors += "unexpected published modules: $unexpected"
@@ -145,10 +163,10 @@ tasks.register("verifyPublication") {
             if (text("/project/licenses/license/name") != "The Apache License, Version 2.0") {
                 errors += "$module: pom license is '${text("/project/licenses/license/name")}'"
             }
-            val hasBomImport = text("count(/project/dependencyManagement/dependencies/dependency[scope='import'])") != "0"
+            if (text("count(/project/dependencyManagement)") != "0") errors += "$module: pom has dependencyManagement"
             val unversioned = xpath.evaluate("/project/dependencies/dependency[not(version)]/artifactId", pom,
                 javax.xml.xpath.XPathConstants.NODESET) as org.w3c.dom.NodeList
-            if (unversioned.length > 0 && !hasBomImport) errors += "$module: dependencies without version and no BOM import"
+            if (unversioned.length > 0) errors += "$module: dependencies without version: ${unversioned.item(0).textContent}"
         }
         if (errors.isNotEmpty()) throw GradleException("Publication is not Maven Central ready:\n  " + errors.joinToString("\n  "))
     }
