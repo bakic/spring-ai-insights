@@ -120,6 +120,13 @@ public class InsightsAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnClass(name = { "reactor.core.publisher.Hooks", "io.micrometer.context.ContextRegistry" })
+    @ConditionalOnBooleanProperty(name = "ai-insights.capture.reactor-context-propagation", matchIfMissing = true)
+    static ReactorContextPropagation insightsReactorContextPropagation() {
+        return new ReactorContextPropagation();
+    }
+
+    @Bean
     @ConditionalOnClass(ToolExecutionExceptionProcessor.class)
     static ToolErrorRecordingPostProcessor insightsToolErrorRecordingPostProcessor(
             ObjectProvider<ObservationRegistry> observationRegistry) {

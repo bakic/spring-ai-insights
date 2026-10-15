@@ -353,6 +353,7 @@ Ratings appear on the Quality page, next to each turn of a conversation, and in 
 | `ai-insights.retention` | `90d` | how long a persistent store keeps turns (at least 1 minute) |
 | `ai-insights.mongodb.collection-prefix` | `ai_insights_` | collection name prefix |
 | `ai-insights.capture.stall-timeout` | `30s` | how long a finished turn waits for its model call's usage before it is recorded without it |
+| `ai-insights.capture.reactor-context-propagation` | `true` | turn on Reactor's automatic context propagation (JVM-wide), so searches and tool calls Spring AI runs on other threads during a streamed turn count in that turn |
 | `ai-insights.capture-content` | `false` | record prompt and answer text |
 | `ai-insights.identity.pseudonymise` | `true` | HMAC-SHA256 user IDs |
 | `ai-insights.identity.secret` | – | HMAC key; required with a persistent store |

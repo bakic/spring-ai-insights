@@ -110,6 +110,17 @@ class InsightsAutoConfigurationTest {
     }
 
     @Test
+    void reactorContextPropagationIsOnByDefault() {
+        runner.run(context -> assertThat(context).hasSingleBean(ReactorContextPropagation.class));
+    }
+
+    @Test
+    void reactorContextPropagationCanBeLeftOff() {
+        runner.withPropertyValues("ai-insights.capture.reactor-context-propagation=false")
+            .run(context -> assertThat(context).doesNotHaveBean(ReactorContextPropagation.class));
+    }
+
+    @Test
     void wrappingCanBeDisabled() {
         runner.withPropertyValues("ai-insights.knowledge.observe-stores=false")
             .withBean("kb", VectorStore.class, PlainStore::new)

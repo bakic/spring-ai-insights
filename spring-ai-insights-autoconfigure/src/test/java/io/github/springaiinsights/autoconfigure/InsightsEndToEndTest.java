@@ -31,6 +31,7 @@ import io.github.springaiinsights.store.TurnQuery;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientResponse;
+import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -72,6 +73,9 @@ class InsightsEndToEndTest {
 
     @Autowired
     Tools tools;
+
+    @Autowired
+    SimpleVectorStore vectorStore;
 
     @AfterEach
     void reset() {
@@ -228,6 +232,36 @@ class InsightsEndToEndTest {
         assertThat(turn.toolCalls()).extracting(ToolCallRecord::name).containsExactly("lookup");
         assertThat(turn.retrievals()).hasSize(1);
         assertThat(turn.modelCalls()).hasSize(2);
+    }
+
+    @Test
+    void questionAnswerAdvisorSearchIsRecordedOnACalledTurn() {
+        ChatClientResponse response = builder.build()
+            .prompt()
+            .user("hello")
+            .advisors(QuestionAnswerAdvisor.builder(vectorStore).build())
+            .call()
+            .chatClientResponse();
+
+        assertThat(recorded(response).retrievals()).singleElement()
+            .satisfies(r -> assertThat(r.store()).isEqualTo("simple"));
+    }
+
+    @Test
+    void questionAnswerAdvisorSearchIsRecordedOnAStreamedTurn() {
+        List<ChatClientResponse> chunks = builder.build()
+            .prompt()
+            .user("hello")
+            .advisors(QuestionAnswerAdvisor.builder(vectorStore).build())
+            .stream()
+            .chatClientResponse()
+            .collectList()
+            .block(Duration.ofSeconds(10));
+
+        ConversationTurn turn = recorded(chunks.get(0));
+        assertThat(turn.streaming()).isTrue();
+        assertThat(turn.retrievals()).singleElement()
+            .satisfies(r -> assertThat(r.store()).isEqualTo("simple"));
     }
 
     private ConversationTurn recorded(ChatClientResponse response) {
