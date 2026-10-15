@@ -99,7 +99,7 @@ public final class DashboardPages {
         double turnsPerConversation = summary.conversations() == 0 ? 0
                 : (double) summary.turns() / summary.conversations();
         return new UsagePage(activeUsers(filter, 1), activeUsers(filter, 7), activeUsers(filter, 30),
-                analytics.newUsers(filter), turnsPerUser, turnsPerConversation,
+                summary.activeUsers(), analytics.newUsers(filter), turnsPerUser, turnsPerConversation,
                 analytics.timeline(filter, Granularity.DAY), byHour, analytics.topUsers(filter, USAGE_TOP_USERS));
     }
 

@@ -9,9 +9,11 @@ import io.github.springaiinsights.analytics.UserUsage;
 
 /**
  * Who uses the assistant. Daily, weekly and monthly active users count the day, 7 and 30 days before the end of the
- * range; {@code turnsByHourOfDay} has 24 entries in the query zone.
+ * range; {@code activeUsers} and {@code newUsers} count the whole range; {@code turnsByHourOfDay} has 24 entries in
+ * the query zone.
  */
-public record UsagePage(long dailyActiveUsers, long weeklyActiveUsers, long monthlyActiveUsers, long newUsers,
+public record UsagePage(long dailyActiveUsers, long weeklyActiveUsers, long monthlyActiveUsers, long activeUsers,
+        long newUsers,
         double turnsPerUser, double turnsPerConversation, List<TimeBucket> days, long[] turnsByHourOfDay,
         List<UserUsage> topUsers) {
 
@@ -30,21 +32,22 @@ public record UsagePage(long dailyActiveUsers, long weeklyActiveUsers, long mont
     public boolean equals(Object other) {
         return other instanceof UsagePage page && dailyActiveUsers == page.dailyActiveUsers
                 && weeklyActiveUsers == page.weeklyActiveUsers && monthlyActiveUsers == page.monthlyActiveUsers
-                && newUsers == page.newUsers && Double.compare(turnsPerUser, page.turnsPerUser) == 0
+                && activeUsers == page.activeUsers && newUsers == page.newUsers
+                && Double.compare(turnsPerUser, page.turnsPerUser) == 0
                 && Double.compare(turnsPerConversation, page.turnsPerConversation) == 0 && days.equals(page.days)
                 && Arrays.equals(turnsByHourOfDay, page.turnsByHourOfDay) && topUsers.equals(page.topUsers);
     }
 
     @Override
     public int hashCode() {
-        return 31 * Objects.hash(dailyActiveUsers, weeklyActiveUsers, monthlyActiveUsers, newUsers, turnsPerUser,
-                turnsPerConversation, days, topUsers) + Arrays.hashCode(turnsByHourOfDay);
+        return 31 * Objects.hash(dailyActiveUsers, weeklyActiveUsers, monthlyActiveUsers, activeUsers, newUsers,
+                turnsPerUser, turnsPerConversation, days, topUsers) + Arrays.hashCode(turnsByHourOfDay);
     }
 
     @Override
     public String toString() {
         return "UsagePage[dailyActiveUsers=" + dailyActiveUsers + ", weeklyActiveUsers=" + weeklyActiveUsers
-                + ", monthlyActiveUsers=" + monthlyActiveUsers + ", newUsers=" + newUsers + ", turnsByHourOfDay="
-                + Arrays.toString(turnsByHourOfDay) + "]";
+                + ", monthlyActiveUsers=" + monthlyActiveUsers + ", activeUsers=" + activeUsers + ", newUsers="
+                + newUsers + ", turnsByHourOfDay=" + Arrays.toString(turnsByHourOfDay) + "]";
     }
 }

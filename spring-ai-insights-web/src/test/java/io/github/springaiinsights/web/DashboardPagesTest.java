@@ -74,6 +74,7 @@ class DashboardPagesTest {
         assertThat(page.dailyActiveUsers()).isEqualTo(2);
         assertThat(page.weeklyActiveUsers()).isEqualTo(3);
         assertThat(page.monthlyActiveUsers()).isEqualTo(3);
+        assertThat(page.activeUsers()).isEqualTo(3);
         assertThat(page.newUsers()).isEqualTo(2);
         assertThat(page.turnsPerUser()).isEqualTo(5.0 / 3);
         assertThat(page.turnsPerConversation()).isEqualTo(1.2);

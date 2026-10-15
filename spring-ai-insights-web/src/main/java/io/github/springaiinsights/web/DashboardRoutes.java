@@ -1,6 +1,7 @@
 package io.github.springaiinsights.web;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.function.Function;
 
@@ -9,6 +10,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -32,13 +35,18 @@ public final class DashboardRoutes {
 
     static final int MAX_ID_LENGTH = 200;
 
+    /** Outside {@code static/} and {@code META-INF/resources/}: only these routes, behind the access check, serve it. */
+    private static final Resource ASSETS = new ClassPathResource("ai-insights-dashboard/");
+
+    private static final Resource INDEX = new ClassPathResource("ai-insights-dashboard/index.html");
+
     private DashboardRoutes() {
     }
 
     public static RouterFunction<ServerResponse> create(String path, String role, boolean allowAnonymous,
             DashboardPages pages, Clock clock) {
         String api = path + "/api";
-        return RouterFunctions.route()
+        RouterFunction<ServerResponse> apiRoutes = RouterFunctions.route()
             .GET(api + "/config", request -> json(pages.config()))
             .GET(api + "/overview", request -> page(request, pages, clock, pages::overview))
             .GET(api + "/usage", request -> page(request, pages, clock, pages::usage))
@@ -50,6 +58,19 @@ public final class DashboardRoutes {
             .filter(headers(true))
             .filter(access(role, allowAnonymous))
             .build();
+        String lastSegment = path.substring(path.lastIndexOf('/') + 1);
+        RouterFunction<ServerResponse> uiRoutes = RouterFunctions.route()
+            .GET(path, request -> ServerResponse.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, lastSegment + "/")
+                .build())
+            .GET(path + "/", request -> ServerResponse.ok()
+                .contentType(new MediaType(MediaType.TEXT_HTML, StandardCharsets.UTF_8))
+                .body(INDEX))
+            .resources(path + "/assets/**", ASSETS)
+            .filter(headers(false))
+            .filter(access(role, allowAnonymous))
+            .build();
+        return apiRoutes.and(uiRoutes);
     }
 
     /** Lets the request through only for allowed users: 401 without a principal, 403 without the role. */

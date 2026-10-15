@@ -6,3 +6,10 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation(testFixtures(project(":spring-ai-insights-core")))
 }
+
+tasks.register<JavaExec>("previewDashboard") {
+    description = "Serves the dashboard with generated data on http://localhost:8089/ai-insights/"
+    group = "application"
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("io.github.springaiinsights.web.DashboardPreview")
+}
