@@ -1,3 +1,5 @@
+description = "Spring AI Insights dashboard and feedback endpoint for Spring MVC applications"
+
 dependencies {
     api(project(":spring-ai-insights-core"))
     compileOnly("org.springframework:spring-webmvc")

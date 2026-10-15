@@ -1,3 +1,5 @@
+description = "Spring AI Insights MongoDB store"
+
 dependencies {
     api(project(":spring-ai-insights-core"))
     compileOnly("org.springframework.data:spring-data-mongodb")

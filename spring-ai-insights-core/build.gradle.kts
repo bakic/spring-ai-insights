@@ -2,6 +2,8 @@ plugins {
     `java-test-fixtures`
 }
 
+description = "Spring AI Insights core: capture advisor, event model, pricing, metrics, analytics and stores API"
+
 dependencies {
     api("org.springframework.ai:spring-ai-client-chat")
     api("org.springframework.ai:spring-ai-model")

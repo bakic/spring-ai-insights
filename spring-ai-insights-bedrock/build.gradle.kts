@@ -1,3 +1,5 @@
+description = "Spring AI Insights support for Amazon Bedrock knowledge bases"
+
 val awsSdkVersion: String by project
 
 dependencies {

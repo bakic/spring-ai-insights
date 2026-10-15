@@ -1,3 +1,5 @@
+description = "Spring AI Insights auto-configuration for Spring Boot"
+
 val springBootVersion: String by project
 
 dependencies {

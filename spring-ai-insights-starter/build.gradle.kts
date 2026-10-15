@@ -1,3 +1,5 @@
+description = "Spring Boot starter for Spring AI Insights: usage, cost, tools and knowledge-base analytics for Spring AI"
+
 dependencies {
     api(project(":spring-ai-insights-autoconfigure"))
     api(project(":spring-ai-insights-mongodb"))
