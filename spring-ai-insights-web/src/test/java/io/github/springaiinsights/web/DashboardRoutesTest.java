@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.ZoneOffset;
 
 import io.github.springaiinsights.analytics.ContractTurns;
+import io.github.springaiinsights.report.WeeklyReports;
 import io.github.springaiinsights.store.InMemoryEventStore;
 import org.junit.jupiter.api.Test;
 
@@ -12,6 +13,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static io.github.springaiinsights.analytics.ContractTurns.TO;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -36,6 +38,56 @@ class DashboardRoutesTest {
         DashboardPages pages = new DashboardPages(store, store, "shop", "USD", clock);
         return MockMvcBuilders.routerFunctions(DashboardRoutes.create("/ai-insights", "AI_INSIGHTS", allowAnonymous,
                 pages, clock)).build();
+    }
+
+    private MockMvc reportMvc(boolean allowAnonymous) {
+        Clock clock = Clock.fixed(TO.plus(java.time.Duration.ofDays(2)), ZoneOffset.UTC);
+        DashboardPages pages = new DashboardPages(store, store, "shop", "USD", clock);
+        WeeklyReports reports = new WeeklyReports(store, "USD", ZoneOffset.UTC, clock, null);
+        return MockMvcBuilders.routerFunctions(DashboardRoutes.create("/ai-insights", "AI_INSIGHTS", allowAnonymous,
+                pages, clock, reports)).build();
+    }
+
+    @Test
+    void reportJson() throws Exception {
+        reportMvc(true).perform(get("/ai-insights/api/report"))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Cache-Control", "no-store"))
+            .andExpect(jsonPath("$.application").value("shop"))
+            .andExpect(jsonPath("$.firstDay").value("2026-09-27"))
+            .andExpect(jsonPath("$.lastDay").value("2026-10-03"))
+            .andExpect(jsonPath("$.current.conversations").isNumber())
+            .andExpect(jsonPath("$.projection.month").value("2026-10"));
+        reportMvc(true).perform(get("/ai-insights/api/report?app=help"))
+            .andExpect(jsonPath("$.application").value("help"));
+        reportMvc(true).perform(get("/ai-insights/api/report?app=" + "a".repeat(201)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void reportHtml() throws Exception {
+        reportMvc(true).perform(get("/ai-insights/report"))
+            .andExpect(status().isOk())
+            .andExpect(content().contentTypeCompatibleWith("text/html"))
+            .andExpect(header().string("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; "
+                    + "frame-ancestors 'none'; base-uri 'none'; form-action 'none'"))
+            .andExpect(header().string("Cache-Control", "no-store"))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("AI assistant weekly report: shop")));
+    }
+
+    @Test
+    void reportNeedsRole() throws Exception {
+        MockMvc mvc = reportMvc(false);
+        mvc.perform(get("/ai-insights/api/report")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/ai-insights/report")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/ai-insights/report").principal(() -> "joe")).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void reportRoutesAbsentWithoutReports() throws Exception {
+        MockMvc mvc = mvc(true);
+        mvc.perform(get("/ai-insights/api/report")).andExpect(status().isNotFound());
+        mvc.perform(get("/ai-insights/report")).andExpect(status().isNotFound());
     }
 
     @Test
