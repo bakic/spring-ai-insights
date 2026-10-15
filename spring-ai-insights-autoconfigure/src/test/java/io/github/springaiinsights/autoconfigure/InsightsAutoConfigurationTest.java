@@ -115,6 +115,14 @@ class InsightsAutoConfigurationTest {
     }
 
     @Test
+    void reactorContextPropagationIsTurnedOnEvenWithLazyInitialization() {
+        runner.withInitializer(context -> context
+            .addBeanFactoryPostProcessor(new org.springframework.boot.LazyInitializationBeanFactoryPostProcessor()))
+            .run(context -> assertThat(context.getBeanFactory().containsSingleton("insightsReactorContextPropagation"))
+                .isTrue());
+    }
+
+    @Test
     void reactorContextPropagationCanBeLeftOff() {
         runner.withPropertyValues("ai-insights.capture.reactor-context-propagation=false")
             .run(context -> assertThat(context).doesNotHaveBean(ReactorContextPropagation.class));

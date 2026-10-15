@@ -29,6 +29,7 @@ import org.springframework.ai.chat.client.ChatClientBuilderCustomizer;
 import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.LazyInitializationExcludeFilter;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -124,6 +125,13 @@ public class InsightsAutoConfiguration {
     @ConditionalOnBooleanProperty(name = "ai-insights.capture.reactor-context-propagation", matchIfMissing = true)
     static ReactorContextPropagation insightsReactorContextPropagation() {
         return new ReactorContextPropagation();
+    }
+
+    @Bean
+    @ConditionalOnClass(name = { "reactor.core.publisher.Hooks", "io.micrometer.context.ContextRegistry" })
+    @ConditionalOnBooleanProperty(name = "ai-insights.capture.reactor-context-propagation", matchIfMissing = true)
+    static LazyInitializationExcludeFilter insightsReactorContextPropagationEagerly() {
+        return LazyInitializationExcludeFilter.forBeanTypes(ReactorContextPropagation.class);
     }
 
     @Bean
