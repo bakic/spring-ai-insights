@@ -51,7 +51,9 @@ class MongoReadWriteUserTest {
     @Test
     void retentionChangeUpdatesTtlIndexWithReadWriteRoleOnly() {
         var template = new MongoTemplate(appClient, "app");
-        new MongoEventStore(template, "ai_insights_", Duration.ofDays(90)).save(ContractTurns.T1);
+        var longer = new MongoEventStore(template, "ai_insights_", Duration.ofDays(90));
+        longer.save(ContractTurns.T1);
+        longer.saveFeedback(ContractTurns.F5);
 
         var shorter = new MongoEventStore(template, "ai_insights_", Duration.ofDays(30));
         shorter.ensureIndexes();
@@ -62,5 +64,11 @@ class MongoReadWriteUserTest {
             .satisfies(i -> assertThat(((Number) i.get("expireAfterSeconds")).longValue())
                 .isEqualTo(Duration.ofDays(30).toSeconds()));
         assertThat(shorter.findTurn("T1")).isPresent();
+        List<Document> feedbackIndexes = template.getCollection("ai_insights_feedback").listIndexes()
+            .into(new ArrayList<>());
+        assertThat(feedbackIndexes).filteredOn(i -> "ttl_createdAt".equals(i.get("name")))
+            .singleElement()
+            .satisfies(i -> assertThat(((Number) i.get("expireAfterSeconds")).longValue())
+                .isEqualTo(Duration.ofDays(30).toSeconds()));
     }
 }

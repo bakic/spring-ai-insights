@@ -26,7 +26,7 @@ public class InsightsMongoAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean(InsightsEventStore.class)
     @ConditionalOnSingleCandidate(MongoOperations.class)
-    InsightsEventStore insightsMongoEventStore(MongoOperations mongo, InsightsProperties properties) {
+    MongoEventStore insightsMongoEventStore(MongoOperations mongo, InsightsProperties properties) {
         return new MongoEventStore(mongo, properties.getMongodb().getCollectionPrefix(), properties.getRetention());
     }
 }

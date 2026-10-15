@@ -2,7 +2,10 @@ package io.github.springaiinsights.analytics;
 
 import java.util.List;
 
+import io.github.springaiinsights.feedback.Feedback;
+import io.github.springaiinsights.feedback.Rating;
 import io.github.springaiinsights.model.ConversationTurn;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Questions about recorded turns. Every store bundled with Spring AI Insights answers them identically. Costs are
@@ -36,6 +39,23 @@ public interface InsightsAnalytics {
 
     /** The turns of one conversation, oldest first, at most {@link #MAX_CONVERSATION_TURNS}. */
     List<ConversationTurn> conversation(String application, String conversationId);
+
+    /**
+     * Users active in the filter whose first turn ever, for the same application and tenant, is inside the range.
+     */
+    long newUsers(InsightsFilter filter);
+
+    /** Documents returned most often first, then by store and document ID; at most {@code limit}. */
+    List<DocumentUsage> documents(InsightsFilter filter, int limit);
+
+    /** Feedback counts by creation time, finish reasons and error types of the selected turns. */
+    QualitySummary quality(InsightsFilter filter);
+
+    /** Feedback created in the range, newest first, then by turn ID; optionally only one rating. */
+    List<Feedback> recentFeedback(InsightsFilter filter, @Nullable Rating rating, int limit);
+
+    /** Feedback on the turns of one conversation, oldest first. */
+    List<Feedback> conversationFeedback(String application, String conversationId);
 
     /** Names of the applications that recorded turns, sorted. */
     List<String> applications();

@@ -32,6 +32,7 @@ recording never blocks or breaks a chat. Micrometer metrics (all tagged with `ap
 | `ai.insights.events.dropped`, `ai.insights.store.errors`, `ai.insights.internal.errors` | – |
 | `ai.insights.turns.stalled` | – (finished turns whose model call never reported its usage; recorded without it) |
 | `ai.insights.unpriced.models` | `model` |
+| `ai.insights.feedback` | `rating` (`up`, `down`) |
 
 User and conversation IDs are **never** metric tags (unbounded cardinality); they live in the turn records.
 
@@ -172,6 +173,103 @@ List<ConversationTurn> chat = analytics.conversation("support-bot", conversation
 
 Costs only add up priced model calls; `unpricedTurns` tells you how many turns are incomplete.
 
+## Dashboard
+
+In a servlet web application, the starter serves a dashboard at **`/ai-insights/`**: overview, usage
+(daily/weekly/monthly active users, new users, busiest hours), cost (per model, tenant and user,
+month-end projection), knowledge base (searches, empty results, most returned documents), tools
+(most to least used, errors, repeated calls), quality (ratings, failures, latency, finish reasons)
+and a timeline of each conversation. Filter by application, period (24 h to 90 days) and tenant.
+
+![Dashboard overview](docs/images/dashboard-overview.png)
+
+**Access.** The dashboard uses **your application's own login**. It does not add a security filter
+chain: whatever authenticates your users (form login, OAuth2 login, JWT resource server) also
+authenticates the dashboard, and an anonymous browser gets your usual login redirect. A signed-in
+user also needs the role `ai-insights.dashboard.role` (`AI_INSIGHTS`, checked with
+`request.isUserInRole`, so the authority is `ROLE_AI_INSIGHTS`); otherwise the answer is `403`.
+Access fails closed: a request that reaches the dashboard unauthenticated (for example because
+your chain permits every path) gets `401`, never data.
+
+With a JWT resource server, map a claim to the role, for example a `roles` claim:
+
+```java
+@Bean
+JwtAuthenticationConverter jwtAuthenticationConverter() {
+    var authorities = new JwtGrantedAuthoritiesConverter();
+    authorities.setAuthoritiesClaimName("roles");   // ["AI_INSIGHTS", ...]
+    authorities.setAuthorityPrefix("ROLE_");
+    var converter = new JwtAuthenticationConverter();
+    converter.setJwtGrantedAuthoritiesConverter(authorities);
+    return converter;
+}
+```
+
+Without Spring Security the dashboard is **off**, unless you set `ai-insights.dashboard.allow-anonymous=true`
+(local development only: anyone who reaches the port sees the data).
+
+- Change the URL with `ai-insights.dashboard.path` (for example `/ops/ai`); feedback moves with it.
+- With the in-memory store the dashboard shows **this instance only, since its last restart**, and
+  says so in a banner. Use MongoDB to see every instance.
+- The UI is a few static files inside the jar: no CDN, no web fonts, no `innerHTML`, and a strict
+  `Content-Security-Policy`. API responses are never cached.
+- **WebFlux** applications get no dashboard or feedback endpoint; use the `InsightsAnalytics` API
+  and the `InsightsFeedback` bean directly.
+- Try it with generated data: `./gradlew :spring-ai-insights-web:previewDashboard`, then open
+  http://localhost:8089/ai-insights/.
+
+## Feedback
+
+Let users rate an answer with thumbs up or down. Every turn has an ID; send it to your front end
+with the answer:
+
+```java
+ChatClientResponse response = chat.prompt().user(question).call().chatClientResponse();
+String turnId = (String) response.context().get(InsightsContextKeys.TURN_ID);
+return new Answer(response.chatResponse().getResult().getOutput().getText(), turnId);
+```
+
+When streaming, every chunk carries the turn ID; read it from the first one
+(`chat.prompt()...stream().chatClientResponse()`).
+
+The front end posts the rating to `{dashboard.path}/feedback`, as the signed-in user:
+
+```js
+await fetch('/ai-insights/feedback', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': csrfToken },
+  body: JSON.stringify({ turnId, rating: 'down', comment: 'The refund policy is outdated' })
+});
+```
+
+`rating` is `up` or `down`; `comment` is optional (at most 1000 characters). A new rating of the
+same turn replaces the previous one.
+
+| Status | When |
+|---|---|
+| `204` | stored |
+| `400` | invalid body (missing `turnId`, unknown rating, comment too long) |
+| `401` | no signed-in user |
+| `404` | unknown turn, **or a turn of another user** (same answer, so turn IDs reveal nothing) |
+| `503` | the store failed |
+
+Only the user who asked can rate a turn: the endpoint compares the principal name with the turn's
+user. The endpoint is a normal `POST` in your security chain, so **CSRF protection applies**: send
+your CSRF token as you do for your other `POST`s (stateless JWT APIs usually have CSRF disabled).
+
+If your turns are not recorded under the principal name (you pass `InsightsContextKeys.USER_ID`,
+or use your own `InsightsIdentityResolver`), call the Java API with the same raw user ID instead:
+
+```java
+boolean saved = insightsFeedback.submit(turnId, userId, Rating.UP, comment);  // false: unknown turn or other user
+```
+
+With the in-memory store, a rating must reach the instance that recorded the turn (one instance or
+sticky sessions); otherwise it gets `404`. Use MongoDB when several instances serve the chat.
+
+Ratings appear on the Quality page, next to each turn of a conversation, and in the
+`ai.insights.feedback` counter. Turn the endpoint off with `ai-insights.feedback.enabled=false`.
+
 ## Configuration
 
 | Property | Default | |
@@ -191,6 +289,11 @@ Costs only add up priced model calls; `unpricedTurns` tells you how many turns a
 | `ai-insights.metrics.tenant-tag` | `false` | tag `ai.insights.cost` with tenant (only for a few tenants) |
 | `ai-insights.writer.queue-capacity` | `10000` | turns waiting to be stored; overflow is dropped and counted |
 | `ai-insights.memory.max-turns` | `10000` | in-memory store size; oldest evicted first |
+| `ai-insights.dashboard.enabled` | `true` | serve the dashboard (servlet apps) |
+| `ai-insights.dashboard.path` | `/ai-insights` | dashboard URL; the feedback endpoint is `{path}/feedback` |
+| `ai-insights.dashboard.role` | `AI_INSIGHTS` | role required to open the dashboard |
+| `ai-insights.dashboard.allow-anonymous` | `false` | open the dashboard to anyone (local development only) |
+| `ai-insights.feedback.enabled` | `true` | serve `POST {path}/feedback` |
 
 Every bean is `@ConditionalOnMissingBean`: replace the store (`InsightsEventStore`), the identity
 resolver (`InsightsIdentityResolver`), or the pricing (`PriceCatalog`) with your own.
@@ -203,5 +306,9 @@ resolver (`InsightsIdentityResolver`), or the pricing (`PriceCatalog`) with your
 
 ## Roadmap
 
-- **Plan 3: built-in dashboard and feedback**, `/ai-insights` UI for usage, cost, tools, knowledge base and quality, plus thumbs up/down linked by turn ID.
-- **Plan 4: weekly report, knowledge-base insights, Grafana dashboards and release**, an email/Slack summary for managers, Bedrock Knowledge Base coverage, and the first Maven Central release.
+- **Plan 4: weekly report, knowledge-base insights, Grafana dashboards and release**, an email/Slack summary for managers, Bedrock Knowledge Base coverage, and the first Maven Central release. Also:
+  - tools that were never called and documents that were never retrieved (needs tool and document catalogs);
+  - tool latency p95;
+  - abandoned conversations;
+  - trace links from a conversation to its OpenTelemetry trace;
+  - a dashboard for WebFlux applications.

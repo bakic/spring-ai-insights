@@ -17,16 +17,22 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.ReplaceOptions;
 import com.mongodb.client.model.Sorts;
+import io.github.springaiinsights.analytics.DocumentUsage;
 import io.github.springaiinsights.analytics.Granularity;
 import io.github.springaiinsights.analytics.InsightsAnalytics;
 import io.github.springaiinsights.analytics.InsightsFilter;
+import io.github.springaiinsights.analytics.KeyCount;
 import io.github.springaiinsights.analytics.ModelUsage;
+import io.github.springaiinsights.analytics.QualitySummary;
 import io.github.springaiinsights.analytics.RetrievalUsage;
 import io.github.springaiinsights.analytics.TenantUsage;
 import io.github.springaiinsights.analytics.TimeBucket;
 import io.github.springaiinsights.analytics.ToolUsage;
 import io.github.springaiinsights.analytics.UsageSummary;
 import io.github.springaiinsights.analytics.UserUsage;
+import io.github.springaiinsights.feedback.Feedback;
+import io.github.springaiinsights.feedback.FeedbackStore;
+import io.github.springaiinsights.feedback.Rating;
 import io.github.springaiinsights.model.ConversationTurn;
 import io.github.springaiinsights.store.InsightsEventStore;
 import io.github.springaiinsights.store.TurnQuery;
@@ -34,15 +40,17 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.bson.Document;
 import org.bson.conversions.Bson;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.data.mongodb.core.MongoOperations;
 
 /**
- * Stores turns in the application's MongoDB (5.0 or later), one document per turn in {@code <prefix>turns}. Indexes,
+ * Stores turns in the application's MongoDB (5.0 or later), one document per turn in {@code <prefix>turns}, and
+ * feedback in {@code <prefix>feedback}, one document per rated turn. Indexes,
  * including a TTL index that enforces the retention, are created on the first save rather than at startup, so an
  * unreachable MongoDB never prevents the application from starting.
  */
-public final class MongoEventStore implements InsightsEventStore, InsightsAnalytics {
+public final class MongoEventStore implements InsightsEventStore, FeedbackStore, InsightsAnalytics {
 
     private static final Log log = LogFactory.getLog(MongoEventStore.class);
 
@@ -67,6 +75,8 @@ public final class MongoEventStore implements InsightsEventStore, InsightsAnalyt
 
     private final String collectionName;
 
+    private final String feedbackCollectionName;
+
     private final Duration retention;
 
     private volatile boolean indexesReady;
@@ -79,11 +89,16 @@ public final class MongoEventStore implements InsightsEventStore, InsightsAnalyt
         }
         this.mongo = mongo;
         this.collectionName = collectionPrefix + "turns";
+        this.feedbackCollectionName = collectionPrefix + "feedback";
         this.retention = retention;
     }
 
     public String collectionName() {
         return collectionName;
+    }
+
+    public String feedbackCollectionName() {
+        return feedbackCollectionName;
     }
 
     public Duration retention() {
@@ -92,7 +107,7 @@ public final class MongoEventStore implements InsightsEventStore, InsightsAnalyt
 
     /** Creates the indexes now; normally they are created by the first save. */
     public void ensureIndexes() {
-        MongoIndexes.ensure(turns(), retention, mongo::executeCommand);
+        MongoIndexes.ensure(turns(), feedback(), retention, mongo::executeCommand);
         indexesReady = true;
     }
 
@@ -100,6 +115,12 @@ public final class MongoEventStore implements InsightsEventStore, InsightsAnalyt
     public void save(ConversationTurn turn) {
         ensureIndexesIfDue();
         turns().replaceOne(Filters.eq("_id", turn.turnId()), TurnDocuments.toDocument(turn), UPSERT);
+    }
+
+    @Override
+    public void saveFeedback(Feedback entry) {
+        ensureIndexesIfDue();
+        feedback().replaceOne(Filters.eq("_id", entry.turnId()), FeedbackDocuments.toDocument(entry), UPSERT);
     }
 
     /**
@@ -115,8 +136,9 @@ public final class MongoEventStore implements InsightsEventStore, InsightsAnalyt
             ensureIndexes();
         }
         catch (RuntimeException e) {
-            log.warn("Could not create the indexes of MongoDB collection " + collectionName
-                    + "; retrying in a minute. Without them old turns are not expired and queries are slow.", e);
+            log.warn("Could not create the indexes of MongoDB collections " + collectionName + " and "
+                    + feedbackCollectionName
+                    + "; retrying in a minute. Without them old data is not expired and queries are slow.", e);
         }
     }
 
@@ -152,7 +174,8 @@ public final class MongoEventStore implements InsightsEventStore, InsightsAnalyt
             .append("avgTimeToFirstTokenMs", new Document("$avg", "$timeToFirstTokenMs"))
             .append("toolCalls", sum("$_tools"))
             .append("retrievals", sum("$_retrievals"))
-            .append("emptyRetrievals", sum("$_emptyRetrievals"));
+            .append("emptyRetrievals", sum("$_emptyRetrievals"))
+            .append("retrievalTurns", sum(cond(new Document("$gt", List.of("$_retrievals", 0)), 1, 0)));
         Document facets = new Document("totals", List.of(new Document("$group", totals)))
             .append("conversations", distinctCount("$conversationId"))
             .append("users", List.of(new Document("$match", new Document("userId", new Document("$ne", null))),
@@ -160,7 +183,7 @@ public final class MongoEventStore implements InsightsEventStore, InsightsAnalyt
         Document result = aggregate(List.of(match(filter), PER_TURN, new Document("$facet", facets))).get(0);
         List<Document> totalsList = result.getList("totals", Document.class);
         if (totalsList.isEmpty()) {
-            return new UsageSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, BigDecimal.ZERO, 0, 0, null, 0, 0, 0);
+            return new UsageSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, BigDecimal.ZERO, 0, 0, null, 0, 0, 0, 0);
         }
         Document t = totalsList.get(0);
         Object ttft = t.get("avgTimeToFirstTokenMs");
@@ -169,7 +192,7 @@ public final class MongoEventStore implements InsightsEventStore, InsightsAnalyt
                 number(t, "inputTokens"), number(t, "outputTokens"), number(t, "cacheReadTokens"),
                 number(t, "cacheWriteTokens"), cost(t.get("cost")), number(t, "unpricedTurns"),
                 ((Number) t.get("avgLatencyMs")).doubleValue(), ttft == null ? null : ((Number) ttft).doubleValue(),
-                number(t, "toolCalls"), number(t, "retrievals"), number(t, "emptyRetrievals"));
+                number(t, "toolCalls"), number(t, "retrievals"), number(t, "emptyRetrievals"), number(t, "retrievalTurns"));
     }
 
     @Override
@@ -306,6 +329,87 @@ public final class MongoEventStore implements InsightsEventStore, InsightsAnalyt
     }
 
     @Override
+    public long newUsers(InsightsFilter filter) {
+        Document match = new Document();
+        if (filter.application() != null) {
+            match.append("application", filter.application());
+        }
+        if (filter.tenantId() != null) {
+            match.append("tenantId", filter.tenantId());
+        }
+        match.append("userId", new Document("$ne", null))
+            .append("startedAt", new Document("$lt", Date.from(filter.to())));
+        Date from = Date.from(filter.from());
+        List<Document> counted = aggregate(List.of(new Document("$match", match),
+                new Document("$group", new Document("_id", "$userId")
+                    .append("first", new Document("$min", "$startedAt"))),
+                new Document("$match", new Document("first", new Document("$gte", from))),
+                new Document("$count", "n")));
+        return counted.isEmpty() ? 0 : number(counted.get(0), "n");
+    }
+
+    @Override
+    public List<DocumentUsage> documents(InsightsFilter filter, int limit) {
+        if (limit < 1) {
+            return List.of();
+        }
+        return aggregate(List.of(match(filter), new Document("$unwind", "$retrievals"),
+                new Document("$unwind", "$retrievals.documentIds"),
+                new Document("$group", new Document("_id",
+                        new Document("store", "$retrievals.store").append("doc", "$retrievals.documentIds"))
+                    .append("hits", sum(1))),
+                new Document("$sort", new Document("hits", -1).append("_id.store", 1).append("_id.doc", 1)),
+                new Document("$limit", limit)))
+            .stream()
+            .map(d -> {
+                Document id = d.get("_id", Document.class);
+                return new DocumentUsage(id.getString("store"), id.getString("doc"), number(d, "hits"));
+            })
+            .toList();
+    }
+
+    @Override
+    public QualitySummary quality(InsightsFilter filter) {
+        Map<String, Long> ratings = new HashMap<>();
+        feedback().aggregate(List.of(new Document("$match", feedbackMatch(filter)),
+                new Document("$group", new Document("_id", "$rating").append("n", sum(1)))))
+            .forEach(d -> ratings.put(d.getString("_id"), number(d, "n")));
+        Document byCount = new Document("$sort", new Document("n", -1).append("_id", 1));
+        Document facets = new Document("finishReasons", List.of(
+                new Document("$project", new Document("r", new Document("$setUnion",
+                        List.of(new Document("$ifNull", Arrays.asList("$finishReasons", List.of())), List.of())))),
+                new Document("$unwind", "$r"), new Document("$group", new Document("_id", "$r").append("n", sum(1))),
+                byCount))
+            .append("errorTypes", List.of(new Document("$match", new Document("errorType", new Document("$ne", null))),
+                    new Document("$group", new Document("_id", "$errorType").append("n", sum(1))), byCount));
+        Document result = aggregate(List.of(match(filter), new Document("$facet", facets))).get(0);
+        return new QualitySummary(ratings.getOrDefault(Rating.UP.name(), 0L),
+                ratings.getOrDefault(Rating.DOWN.name(), 0L), keyCounts(result, "finishReasons"),
+                keyCounts(result, "errorTypes"));
+    }
+
+    @Override
+    public List<Feedback> recentFeedback(InsightsFilter filter, @Nullable Rating rating, int limit) {
+        if (limit < 1) {
+            return List.of();
+        }
+        Document match = feedbackMatch(filter);
+        if (rating != null) {
+            match.append("rating", rating.name());
+        }
+        return readFeedback(feedback().find(match)
+            .sort(Sorts.orderBy(Sorts.descending("createdAt"), Sorts.ascending("_id")))
+            .limit(limit));
+    }
+
+    @Override
+    public List<Feedback> conversationFeedback(String application, String conversationId) {
+        return readFeedback(feedback()
+            .find(Filters.and(Filters.eq("application", application), Filters.eq("conversationId", conversationId)))
+            .sort(Sorts.orderBy(Sorts.ascending("createdAt"), Sorts.ascending("_id"))));
+    }
+
+    @Override
     public List<String> applications() {
         return turns().distinct("application", String.class).into(new ArrayList<>()).stream().sorted().toList();
     }
@@ -320,6 +424,33 @@ public final class MongoEventStore implements InsightsEventStore, InsightsAnalyt
             match.append("tenantId", filter.tenantId());
         }
         return new Document("$match", match);
+    }
+
+    private static Document feedbackMatch(InsightsFilter filter) {
+        Document match = new Document();
+        if (filter.application() != null) {
+            match.append("application", filter.application());
+        }
+        match.append("createdAt", new Document("$gte", Date.from(filter.from())).append("$lt", Date.from(filter.to())));
+        if (filter.tenantId() != null) {
+            match.append("tenantId", filter.tenantId());
+        }
+        return match;
+    }
+
+    private static List<KeyCount> keyCounts(Document facets, String name) {
+        return facets.getList(name, Document.class)
+            .stream()
+            .map(d -> new KeyCount(d.getString("_id"), number(d, "n")))
+            .toList();
+    }
+
+    private static List<Feedback> readFeedback(Iterable<Document> docs) {
+        List<Feedback> result = new ArrayList<>();
+        for (Document doc : docs) {
+            result.add(FeedbackDocuments.fromDocument(doc));
+        }
+        return result;
     }
 
     private List<Document> aggregate(List<Document> pipeline) {
@@ -374,6 +505,10 @@ public final class MongoEventStore implements InsightsEventStore, InsightsAnalyt
 
     private MongoCollection<Document> turns() {
         return mongo.getCollection(collectionName);
+    }
+
+    private MongoCollection<Document> feedback() {
+        return mongo.getCollection(feedbackCollectionName);
     }
 
     private static List<ConversationTurn> read(Iterable<Document> docs) {

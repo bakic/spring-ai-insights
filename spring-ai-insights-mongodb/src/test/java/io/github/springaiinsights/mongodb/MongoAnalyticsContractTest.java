@@ -4,6 +4,7 @@ import java.time.Duration;
 
 import io.github.springaiinsights.analytics.InsightsAnalytics;
 import io.github.springaiinsights.analytics.InsightsAnalyticsContract;
+import io.github.springaiinsights.feedback.FeedbackStore;
 import io.github.springaiinsights.store.InsightsEventStore;
 
 class MongoAnalyticsContractTest extends InsightsAnalyticsContract {
@@ -13,6 +14,11 @@ class MongoAnalyticsContractTest extends InsightsAnalyticsContract {
 
     @Override
     protected InsightsEventStore store() {
+        return store;
+    }
+
+    @Override
+    protected FeedbackStore feedbackStore() {
         return store;
     }
 

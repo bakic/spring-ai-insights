@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>AI Insights</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="assets/app.css">
+  <script src="assets/app.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <nav class="rail" aria-label="Dashboard pages">
+      <p class="brand">AI Insights</p>
+      <ul>
+        <li><a href="#overview" data-page="overview">Overview</a></li>
+        <li><a href="#usage" data-page="usage">Usage</a></li>
+        <li><a href="#cost" data-page="cost">Cost</a></li>
+        <li><a href="#knowledge" data-page="knowledge">Knowledge base</a></li>
+        <li><a href="#tools" data-page="tools">Tools</a></li>
+        <li><a href="#quality" data-page="quality">Quality</a></li>
+      </ul>
+    </nav>
+    <div class="main">
+      <form class="filters" id="filters" aria-label="Filters">
+        <label class="field">
+          <span>Application</span>
+          <select id="f-app"></select>
+        </label>
+        <fieldset class="field period">
+          <legend>Period</legend>
+          <div class="segments">
+            <input type="radio" name="period" id="p-24h" value="24h"><label for="p-24h">24 h</label>
+            <input type="radio" name="period" id="p-7d" value="7d" checked><label for="p-7d">7 days</label>
+            <input type="radio" name="period" id="p-30d" value="30d"><label for="p-30d">30 days</label>
+            <input type="radio" name="period" id="p-90d" value="90d"><label for="p-90d">90 days</label>
+          </div>
+        </fieldset>
+        <label class="field">
+          <span>Tenant</span>
+          <input id="f-tenant" type="search" placeholder="All tenants" maxlength="200" autocomplete="off">
+        </label>
+        <p class="zone" id="f-zone"></p>
+      </form>
+      <p class="banner" id="banner" hidden>In-memory store: this page shows this instance only, since its last restart.</p>
+      <main id="page" tabindex="-1" aria-live="polite"></main>
+    </div>
+  </div>
+</body>
+</html>

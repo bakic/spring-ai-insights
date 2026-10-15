@@ -3,6 +3,7 @@ package io.github.springaiinsights.metrics;
 import java.time.Duration;
 import java.util.Locale;
 
+import io.github.springaiinsights.feedback.Rating;
 import io.github.springaiinsights.model.ConversationTurn;
 import io.github.springaiinsights.model.ModelCall;
 import io.github.springaiinsights.model.RetrievalRecord;
@@ -54,6 +55,10 @@ public final class InsightsMetrics {
         if (turn.timeToFirstTokenMs() != null) {
             registry.timer("ai.insights.ttft", base).record(Duration.ofMillis(turn.timeToFirstTokenMs()));
         }
+    }
+
+    public void feedback(Rating rating) {
+        registry.counter("ai.insights.feedback", base.and("rating", lower(rating.name()))).increment();
     }
 
     public void eventDropped() {
