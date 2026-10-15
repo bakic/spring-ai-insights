@@ -145,6 +145,21 @@ Stores that emit no observation themselves, such as `BedrockKnowledgeBaseVectorS
 so their searches are recorded too. Inject them as `VectorStore`, not as their concrete class; or turn
 the wrapping off with `ai-insights.knowledge.observe-stores=false`.
 
+To also see documents that are **never** retrieved in an Amazon Bedrock Knowledge Base, add
+`spring-ai-insights-bedrock` and list the knowledge bases:
+
+```yaml
+ai-insights:
+  knowledge:
+    bedrock:
+      knowledge-base-ids: KB12345678
+      region: eu-west-1   # optional, else the AWS SDK default
+```
+
+The documents are listed at startup and every hour with the Bedrock Agent API
+(`bedrock:ListDataSources` and `bedrock:ListKnowledgeBaseDocuments`); a `BedrockAgentClient` bean is
+used when you define one. Listing failures are logged and the previous list is kept.
+
 ## Storage
 
 With Spring Data MongoDB configured in your app (`spring-boot-starter-data-mongodb`, MongoDB 5.0 or
@@ -297,6 +312,9 @@ Ratings appear on the Quality page, next to each turn of a conversation, and in 
 | `ai-insights.identity.tenant-claim` | `tenant_id` | JWT claim holding the tenant |
 | `ai-insights.knowledge.document-key` | `source` | chunk metadata identifying the document; chunk ID when absent |
 | `ai-insights.knowledge.observe-stores` | `true` | wrap vector stores that emit no observation |
+| `ai-insights.knowledge.bedrock.knowledge-base-ids` | – | Bedrock Knowledge Bases whose documents are listed |
+| `ai-insights.knowledge.bedrock.region` | SDK default | region of those knowledge bases |
+| `ai-insights.knowledge.bedrock.refresh` | `1h` | how often the document list is refreshed (≥ 1m) |
 | `ai-insights.pricing.currency` | `USD` | |
 | `ai-insights.pricing.models[]` | – | `model`, `input`, `output`, `cache-read`, `cache-write`, `input-includes-cached` |
 | `ai-insights.metrics.tenant-tag` | `false` | tag `ai.insights.cost` with tenant (only for a few tenants) |

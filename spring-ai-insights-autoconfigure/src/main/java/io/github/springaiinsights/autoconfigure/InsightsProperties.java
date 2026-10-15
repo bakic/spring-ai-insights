@@ -423,6 +423,12 @@ public class InsightsProperties {
          */
         private boolean observeStores = true;
 
+        private final Bedrock bedrock = new Bedrock();
+
+        public Bedrock getBedrock() {
+            return bedrock;
+        }
+
         public String getDocumentKey() {
             return documentKey;
         }
@@ -437,6 +443,43 @@ public class InsightsProperties {
 
         public void setObserveStores(boolean observeStores) {
             this.observeStores = observeStores;
+        }
+
+        /** Lists the documents of Amazon Bedrock Knowledge Bases, to show those never retrieved. */
+        public static class Bedrock {
+
+            /** IDs of the knowledge bases to list; listing is off when empty. */
+            private List<String> knowledgeBaseIds = new ArrayList<>();
+
+            /** AWS region of the knowledge bases, when no BedrockAgentClient bean exists; else the SDK default. */
+            private @Nullable String region;
+
+            /** How often the document list is refreshed (at least 1 minute). */
+            private Duration refresh = Duration.ofHours(1);
+
+            public List<String> getKnowledgeBaseIds() {
+                return knowledgeBaseIds;
+            }
+
+            public void setKnowledgeBaseIds(List<String> knowledgeBaseIds) {
+                this.knowledgeBaseIds = knowledgeBaseIds;
+            }
+
+            public @Nullable String getRegion() {
+                return region;
+            }
+
+            public void setRegion(@Nullable String region) {
+                this.region = region;
+            }
+
+            public Duration getRefresh() {
+                return refresh;
+            }
+
+            public void setRefresh(Duration refresh) {
+                this.refresh = refresh;
+            }
         }
     }
 }
