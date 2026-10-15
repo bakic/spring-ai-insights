@@ -21,7 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class DashboardRoutesTest {
 
     static final String CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
-            + "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+            + "font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
     private static final String RANGE = "?from=2026-09-30T22:00:00Z&to=2026-10-02T22:00:00Z&zone=Europe/Paris";
 

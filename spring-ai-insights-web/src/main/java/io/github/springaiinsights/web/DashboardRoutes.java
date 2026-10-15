@@ -35,7 +35,7 @@ import org.springframework.web.servlet.function.ServerResponse;
 public final class DashboardRoutes {
 
     static final String CONTENT_SECURITY_POLICY = "default-src 'none'; script-src 'self'; style-src 'self'; "
-            + "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+            + "img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
     /** The report page has no script and inline styles only, so that it also renders as an email. */
     static final String REPORT_CONTENT_SECURITY_POLICY = "default-src 'none'; style-src 'unsafe-inline'; "

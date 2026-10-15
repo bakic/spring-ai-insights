@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Consumption Statement</title>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--band:#1f2f86;--ground:#f2f4f7;--sheet:#fff;--ink:#141a2e;--muted:#5a6276;--rule:#d9dde6;--now:#f4c21f;--then:#a9b3cf;--fail:#c23a2b}
+*{box-sizing:border-box}body{margin:0;width:1440px;height:900px;overflow:hidden;font-family:"Public Sans",sans-serif;background:var(--ground);color:var(--ink);font-variant-numeric:tabular-nums;display:grid;grid-template-columns:232px 1fr}
+.rail{background:var(--band);color:#fff;padding:24px 16px}.brand{font-weight:800;font-size:19px;letter-spacing:-.01em;margin:0 8px 4px}.app{font-size:13px;opacity:.75;margin:0 8px 28px}
+.rail a{display:flex;justify-content:space-between;color:#dfe3f5;text-decoration:none;padding:9px 10px;border-radius:6px;font-size:15px}.rail a.on{background:#fff;color:var(--band);font-weight:700}.rail a span{opacity:.7;font-size:13px}
+main{padding:22px 36px}
+.bar{display:flex;gap:16px;align-items:center;border-bottom:1px solid var(--rule);padding-bottom:14px}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:6px;overflow:hidden;background:#fff}.seg b{font-weight:500;padding:7px 14px;font-size:14px;border-left:1px solid var(--rule)}.seg b:first-child{border:0}.seg b.on{background:var(--ink);color:#fff}
+.sel{border:1px solid var(--rule);border-radius:6px;background:#fff;padding:7px 12px;font-size:14px;min-width:170px}.zone{margin-left:auto;font-size:13px;color:var(--muted)}
+.statement{display:grid;grid-template-columns:360px 1fr;margin-top:20px;background:var(--sheet);border:1px solid var(--rule);border-radius:8px}
+.due{padding:24px 28px;border-right:1px solid var(--rule)}
+.due h1{font-size:15px;font-weight:600;margin:0;color:var(--muted)}.due .amt{font-size:56px;font-weight:800;letter-spacing:-.03em;margin:6px 0 2px}.due p{margin:0;font-size:14px;color:var(--muted)}
+.due .proj{margin-top:18px;padding-top:14px;border-top:1px dashed var(--rule);display:flex;justify-content:space-between;font-size:14px}.due .proj b{font-size:18px}
+.answer{font-size:21px;font-weight:600;line-height:1.35;margin:0 0 18px;max-width:46ch}
+.reads{padding:24px 28px}
+table.meter{width:100%;border-collapse:collapse}.meter th{font-size:13px;font-weight:500;color:var(--muted);text-align:right;padding:0 10px 8px}.meter th:first-child{text-align:left}
+.meter td{border-top:1px solid var(--rule);padding:10px;text-align:right;font-size:15px}.meter td:first-child{text-align:left;font-weight:600}
+.pair{display:flex;flex-direction:column;gap:3px;width:150px}.pair i{display:block;height:8px;border-radius:2px}.pair .n{background:var(--now)}.pair .t{background:var(--then)}
+.up{color:var(--fail)}.down{color:#1d7a46}
+.grid{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;margin-top:20px}
+.mod{background:#fff;border:1px solid var(--rule);border-radius:8px;padding:18px 22px}.mod h2{font-size:16px;margin:0 0 4px}.mod .k{display:flex;gap:16px;font-size:12px;color:var(--muted);margin-bottom:10px}.mod .k i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.hist{display:flex;align-items:flex-end;gap:14px;height:150px;border-bottom:1px solid var(--ink);padding:0 4px}.hist div{flex:1;display:flex;gap:3px;align-items:flex-end}.hist em{flex:1;border-radius:2px 2px 0 0}
+.days{display:flex;gap:14px;padding:6px 4px 0;font-size:12px;color:var(--muted)}.days span{flex:1;text-align:center}
+.tariff td{padding:7px 0;border-top:1px solid var(--rule);font-size:14px}.tariff td:last-child{text-align:right}.tariff{width:100%;border-collapse:collapse}
+.flag{background:#fdf3d0;border-left:3px solid var(--now);padding:8px 12px;font-size:13px;margin-top:12px}
+</style></head><body>
+<nav class="rail"><div class="brand">AI Insights</div><div class="app">helpdesk-demo</div>
+<a class="on" href="#">Statement <span>7 d</span></a><a href="#">Usage</a><a href="#">Cost</a><a href="#">Knowledge base</a><a href="#">Tools</a><a href="#">Quality</a></nav>
+<main>
+<div class="bar"><span class="sel">helpdesk-demo ▾</span><span class="seg"><b>24 h</b><b class="on">7 days</b><b>30 days</b><b>90 days</b></span><span class="sel">All tenants</span><span class="zone">8 – 15 Oct 2026 · Europe/Paris</span></div>
+<section class="statement">
+<div class="due"><h1>Cost this period</h1><div class="amt">$0.085</div><p>199 turns · $0.00043 per turn</p>
+<div class="proj"><span>Month to date</span><b>$0.112</b></div><div class="proj" style="border:0;padding-top:6px;margin-top:0"><span>Estimated month end</span><b>$0.21</b></div>
+<div class="flag">Estimated: in-memory store, this instance since 14:02.</div></div>
+<div class="reads"><p class="answer">12 people had 66 conversations with the assistant. Every turn succeeded; the knowledge base answered 96 % of them.</p>
+<table class="meter"><thead><tr><th>Reading</th><th>This period</th><th>Previous</th><th>Change</th><th></th></tr></thead><tbody>
+<tr><td>Turns</td><td>199</td><td>142</td><td class="up">+40 %</td><td><div class="pair"><i class="n" style="width:100%"></i><i class="t" style="width:71%"></i></div></td></tr>
+<tr><td>Active users</td><td>12</td><td>9</td><td class="up">+33 %</td><td><div class="pair"><i class="n" style="width:100%"></i><i class="t" style="width:75%"></i></div></td></tr>
+<tr><td>Tokens</td><td>50.2 k</td><td>38.0 k</td><td class="up">+32 %</td><td><div class="pair"><i class="n" style="width:100%"></i><i class="t" style="width:76%"></i></div></td></tr>
+<tr><td>Failed turns</td><td>0 %</td><td>1.4 %</td><td class="down">−1.4 pt</td><td><div class="pair"><i class="n" style="width:2%"></i><i class="t" style="width:40%"></i></div></td></tr>
+</tbody></table></div></section>
+<div class="grid"><section class="mod"><h2>Turns per day</h2><div class="k"><span><i style="background:var(--now)"></i>This period</span><span><i style="background:var(--then)"></i>Previous period</span></div>
+<div class="hist">
+<div><em style="height:40%;background:var(--now)"></em><em style="height:30%;background:var(--then)"></em></div>
+<div><em style="height:55%;background:var(--now)"></em><em style="height:42%;background:var(--then)"></em></div>
+<div><em style="height:62%;background:var(--now)"></em><em style="height:50%;background:var(--then)"></em></div>
+<div><em style="height:48%;background:var(--now)"></em><em style="height:44%;background:var(--then)"></em></div>
+<div><em style="height:70%;background:var(--now)"></em><em style="height:51%;background:var(--then)"></em></div>
+<div><em style="height:22%;background:var(--now)"></em><em style="height:18%;background:var(--then)"></em></div>
+<div><em style="height:92%;background:var(--now)"></em><em style="height:60%;background:var(--then)"></em></div></div>
+<div class="days"><span>Thu 9</span><span>Fri 10</span><span>Sat 11</span><span>Sun 12</span><span>Mon 13</span><span>Tue 14</span><span>Wed 15</span></div></section>
+<section class="mod"><h2>Tariff applied</h2><div class="k">Your price catalog, per million tokens</div>
+<table class="tariff"><tr><td>gpt-4o-mini · input</td><td>$0.15</td></tr><tr><td>gpt-4o-mini · output</td><td>$0.60</td></tr><tr><td>gpt-4o-mini · cached input</td><td>$0.075</td></tr><tr><td>gpt-4o · input</td><td>$2.50</td></tr></table></section></div>
+</main></body></html>
