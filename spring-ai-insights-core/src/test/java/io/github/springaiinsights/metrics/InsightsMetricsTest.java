@@ -72,6 +72,23 @@ class InsightsMetricsTest {
     }
 
     @Test
+    void ttftPublishesABoundedHistogram() {
+        // SimpleMeterRegistry never publishes aggregable histogram buckets; Prometheus is the registry that does.
+        var prometheus = new io.micrometer.prometheusmetrics.PrometheusMeterRegistry(
+                io.micrometer.prometheusmetrics.PrometheusConfig.DEFAULT);
+        var m = new InsightsMetrics(prometheus, "app", false);
+        m.turnRecorded(TestTurns.minimal().withTtftMs(800L).build());
+        var counts = prometheus.get("ai.insights.ttft").timer().takeSnapshot().histogramCounts();
+        assertThat(counts).isNotEmpty();
+        assertThat(counts[0].bucket(java.util.concurrent.TimeUnit.SECONDS)).isGreaterThanOrEqualTo(0.05);
+        assertThat(counts[counts.length - 1].bucket(java.util.concurrent.TimeUnit.SECONDS)).isLessThanOrEqualTo(60);
+        for (var c : counts) {
+            double le = c.bucket(java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(c.count()).as("bucket le=%s", le).isEqualTo(le >= 0.8 ? 1 : 0);
+        }
+    }
+
+    @Test
     void operationalCounters() {
         var m = new InsightsMetrics(reg, "app", false);
         m.eventDropped();

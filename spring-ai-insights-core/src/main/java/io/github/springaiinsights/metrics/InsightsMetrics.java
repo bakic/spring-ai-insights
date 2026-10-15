@@ -10,6 +10,7 @@ import io.github.springaiinsights.model.RetrievalRecord;
 import io.github.springaiinsights.model.ToolCallRecord;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
+import io.micrometer.core.instrument.Timer;
 
 /**
  * Low-cardinality Micrometer meters derived from recorded turns. User, conversation and turn IDs are never
@@ -53,7 +54,13 @@ public final class InsightsMetrics {
                     retrieval.resultCount() == 0 ? "empty" : "hit")).increment();
         }
         if (turn.timeToFirstTokenMs() != null) {
-            registry.timer("ai.insights.ttft", base).record(Duration.ofMillis(turn.timeToFirstTokenMs()));
+            Timer.builder("ai.insights.ttft")
+                .tags(base)
+                .publishPercentileHistogram()
+                .minimumExpectedValue(Duration.ofMillis(50))
+                .maximumExpectedValue(Duration.ofSeconds(60))
+                .register(registry)
+                .record(Duration.ofMillis(turn.timeToFirstTokenMs()));
         }
     }
 
