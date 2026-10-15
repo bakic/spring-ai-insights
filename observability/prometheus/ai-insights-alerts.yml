@@ -1,0 +1,87 @@
+# Prometheus alert rules for spring-ai-insights.
+#
+# Load this file in Prometheus (rule_files), Mimir, Thanos Ruler, VictoriaMetrics vmalert, or as
+# Grafana data-source-managed rules. The thresholds are starting points: copy the file and tune them
+# to your traffic and budget.
+#
+# Every rule is grouped by application. No rule fires without traffic: ratios need a minimum volume,
+# and an empty histogram gives NaN, which never compares true.
+groups:
+  - name: ai-insights
+    rules:
+      - alert: AiInsightsCostSpike
+        # Cost in the last hour is above 3x the hourly average of the 7 days before it, and above
+        # 1 unit of the currency so that a tiny new application does not alert on its first cents.
+        # An application with less than an hour of history has no baseline yet and is not judged.
+        expr: |
+          (
+            sum by (application, currency) (increase(ai_insights_cost_total[1h]))
+              > 3 * sum by (application, currency) (increase(ai_insights_cost_total[7d] offset 1h)) / 168
+          )
+          and
+          sum by (application, currency) (increase(ai_insights_cost_total[1h])) > 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI cost spike in {{ $labels.application }}"
+          description: "{{ $labels.application }} spent more than three times its usual hourly amount ({{ $labels.currency }}) in the last hour."
+
+      - alert: AiInsightsToolErrorRate
+        # More than 10% of the calls to one tool failed over 15 minutes, with at least 10 calls.
+        expr: |
+          (
+            sum by (application, tool) (increase(ai_insights_tool_calls_total{outcome="error"}[15m]))
+              / sum by (application, tool) (increase(ai_insights_tool_calls_total[15m]))
+          ) > 0.10
+          and on (application, tool)
+          sum by (application, tool) (increase(ai_insights_tool_calls_total[15m])) >= 10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tool {{ $labels.tool }} is failing in {{ $labels.application }}"
+          description: "More than 10% of the calls to {{ $labels.tool }} in {{ $labels.application }} failed over the last 15 minutes."
+
+      - alert: AiInsightsEmptyRetrievalRate
+        # More than 30% of the knowledge-base searches of one store found nothing over 1 hour, with at
+        # least 20 searches.
+        expr: |
+          (
+            sum by (application, store) (increase(ai_insights_retrievals_total{result="empty"}[1h]))
+              / sum by (application, store) (increase(ai_insights_retrievals_total[1h]))
+          ) > 0.30
+          and on (application, store)
+          sum by (application, store) (increase(ai_insights_retrievals_total[1h])) >= 20
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Knowledge base {{ $labels.store }} often finds nothing in {{ $labels.application }}"
+          description: "More than 30% of the searches in {{ $labels.store }} for {{ $labels.application }} returned no document over the last hour."
+
+      - alert: AiInsightsSlowFirstToken
+        # The 95th percentile time to first token is above 5 seconds over 10 minutes.
+        expr: |
+          histogram_quantile(0.95,
+            sum by (application, le) (rate(ai_insights_ttft_seconds_bucket[10m]))
+          ) > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow first token in {{ $labels.application }}"
+          description: "Users of {{ $labels.application }} waited more than 5 seconds for the first token (p95, last 10 minutes)."
+
+      - alert: AiInsightsEventsLost
+        # Turns were dropped because the write queue was full (ai-insights.writer.queue-capacity), or a
+        # turn or a feedback could not be saved, so the insights for this period are incomplete.
+        expr: |
+          sum by (application) (increase(ai_insights_events_dropped_total[10m])) > 0
+          or
+          sum by (application) (increase(ai_insights_store_errors_total[10m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "AI insights are losing turns in {{ $labels.application }}"
+          description: "{{ $labels.application }} lost turns or feedback in the last 10 minutes; check the store and ai-insights.writer.queue-capacity."

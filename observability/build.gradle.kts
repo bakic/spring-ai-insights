@@ -7,3 +7,7 @@ dependencies {
     testImplementation("org.yaml:snakeyaml")
     testImplementation("com.jayway.jsonpath:json-path")
 }
+
+tasks.test {
+    inputs.dir("prometheus")
+}

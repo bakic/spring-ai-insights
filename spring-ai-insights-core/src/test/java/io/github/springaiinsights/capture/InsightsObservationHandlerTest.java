@@ -200,7 +200,7 @@ class InsightsObservationHandlerTest {
         ctx.setResponse(response("m1", new DefaultUsage(1, 1)));
         lone.stop();
         assertThat(recorder.hasModelCalls()).isFalse();
-        assertThat(meters.find("ai.insights.internal.errors").counter()).isNull();
+        assertThat(meters.get("ai.insights.internal.errors").counter().count()).isZero();
     }
 
     @Test

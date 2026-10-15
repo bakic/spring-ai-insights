@@ -89,6 +89,15 @@ class InsightsMetricsTest {
     }
 
     @Test
+    void healthCountersExistAtZeroSoTheFirstIncrementIsVisibleToRates() {
+        new InsightsMetrics(reg, "app", false);
+        for (String name : List.of("ai.insights.events.dropped", "ai.insights.store.errors",
+                "ai.insights.turns.stalled", "ai.insights.internal.errors")) {
+            assertThat(reg.get(name).tag("application", "app").counter().count()).as(name).isZero();
+        }
+    }
+
+    @Test
     void operationalCounters() {
         var m = new InsightsMetrics(reg, "app", false);
         m.eventDropped();

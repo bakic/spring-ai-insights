@@ -28,6 +28,11 @@ public final class InsightsMetrics {
         this.registry = registry;
         this.base = Tags.of("application", application);
         this.tenantTag = tenantTag;
+        // Registered up front: a counter born at 1 has no earlier sample, so rate() and increase() would miss it.
+        for (String name : new String[] {"ai.insights.events.dropped", "ai.insights.store.errors",
+                "ai.insights.turns.stalled", "ai.insights.internal.errors"}) {
+            registry.counter(name, base);
+        }
     }
 
     public void turnRecorded(ConversationTurn turn) {
