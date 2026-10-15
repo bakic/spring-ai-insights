@@ -109,8 +109,8 @@ public class InsightsAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    InsightsObservationHandler insightsObservationHandler(InsightsMetrics metrics) {
-        return new InsightsObservationHandler(metrics);
+    InsightsObservationHandler insightsObservationHandler(InsightsMetrics metrics, InsightsProperties properties) {
+        return new InsightsObservationHandler(metrics, properties.getKnowledge().getDocumentKey());
     }
 
     @Bean(destroyMethod = "close")

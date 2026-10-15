@@ -49,6 +49,8 @@ public class InsightsProperties {
 
     private final Feedback feedback = new Feedback();
 
+    private final Knowledge knowledge = new Knowledge();
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -123,6 +125,10 @@ public class InsightsProperties {
 
     public Feedback getFeedback() {
         return feedback;
+    }
+
+    public Knowledge getKnowledge() {
+        return knowledge;
     }
 
     public enum StoreType {
@@ -400,6 +406,37 @@ public class InsightsProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+    }
+
+    public static class Knowledge {
+
+        /**
+         * Metadata key whose value identifies a retrieved document, so chunks of one source count as one document.
+         * Empty to use the vector store's document IDs.
+         */
+        private String documentKey = "source";
+
+        /**
+         * Whether VectorStore beans that emit no observations (e.g. the Bedrock Knowledge Base store) are wrapped so
+         * their queries are recorded. Wrapped stores must be injected as VectorStore.
+         */
+        private boolean observeStores = true;
+
+        public String getDocumentKey() {
+            return documentKey;
+        }
+
+        public void setDocumentKey(String documentKey) {
+            this.documentKey = documentKey;
+        }
+
+        public boolean isObserveStores() {
+            return observeStores;
+        }
+
+        public void setObserveStores(boolean observeStores) {
+            this.observeStores = observeStores;
         }
     }
 }

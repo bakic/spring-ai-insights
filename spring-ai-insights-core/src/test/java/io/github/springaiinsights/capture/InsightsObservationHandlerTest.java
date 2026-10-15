@@ -5,11 +5,13 @@ import java.util.List;
 
 import io.github.springaiinsights.metrics.InsightsMetrics;
 import io.github.springaiinsights.model.ConversationTurn;
+import io.github.springaiinsights.model.RetrievalRecord;
 import io.github.springaiinsights.model.ToolOutcome;
 import io.github.springaiinsights.model.TurnOutcome;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
@@ -39,7 +41,7 @@ class InsightsObservationHandlerTest {
     private final Observation turn;
 
     InsightsObservationHandlerTest() {
-        registry.observationConfig().observationHandler(new InsightsObservationHandler(new InsightsMetrics(meters, "app", false)));
+        registry.observationConfig().observationHandler(new InsightsObservationHandler(new InsightsMetrics(meters, "app", false), "source"));
         turn = Observation.start("turn", registry);
         TurnRecorders.attach(turn.getContext(), recorder);
     }
@@ -130,6 +132,54 @@ class InsightsObservationHandlerTest {
         assertThat(r.resultCount()).isEqualTo(2);
         assertThat(r.scores()).containsExactly(0.9, 0.7);
         assertThat(r.documentIds()).containsExactly("d1", "d2");
+    }
+
+    private static RetrievalRecord retrieve(@Nullable String documentKey, List<Document> documents) {
+        ObservationRegistry own = ObservationRegistry.create();
+        own.observationConfig()
+            .observationHandler(new InsightsObservationHandler(
+                    new InsightsMetrics(new SimpleMeterRegistry(), "app", false), documentKey));
+        TurnRecorder ownRecorder = TurnRecorderTest.recorder();
+        Observation ownTurn = Observation.start("turn", own);
+        TurnRecorders.attach(ownTurn.getContext(), ownRecorder);
+        var query = VectorStoreObservationContext
+            .builder("kb", VectorStoreObservationContext.Operation.QUERY)
+            .build();
+        var obs = Observation.createNotStarted("q", () -> query, own).parentObservation(ownTurn).start();
+        query.setQueryResponse(documents);
+        obs.stop();
+        return ownRecorder.finish(TurnOutcome.SUCCESS, null, List.of(), System.nanoTime())
+            .orElseThrow()
+            .retrievals()
+            .get(0);
+    }
+
+    private static List<Document> chunks() {
+        return List.of(
+                Document.builder().id("c1").text("a").metadata("source", "s3://kb/a.pdf").score(0.9).build(),
+                Document.builder().id("c2").text("b").metadata("source", "s3://kb/a.pdf").score(0.8).build(),
+                Document.builder().id("c3").text("c").score(0.7).build());
+    }
+
+    @Test
+    void retrievalUsesMetadataKeyDeduplicated() {
+        RetrievalRecord r = retrieve("source", chunks());
+        assertThat(r.documentIds()).containsExactly("s3://kb/a.pdf", "c3");
+        assertThat(r.resultCount()).isEqualTo(3);
+        assertThat(r.scores()).containsExactly(0.9, 0.8, 0.7);
+    }
+
+    @Test
+    void blankKeyUsesDocumentIds() {
+        assertThat(retrieve("", chunks()).documentIds()).containsExactly("c1", "c2", "c3");
+        assertThat(retrieve(null, chunks()).documentIds()).containsExactly("c1", "c2", "c3");
+    }
+
+    @Test
+    void nonStringMetadataIsStringified() {
+        RetrievalRecord r = retrieve("source",
+                List.of(Document.builder().id("c1").text("a").metadata("source", 42).build()));
+        assertThat(r.documentIds()).containsExactly("42");
     }
 
     @Test

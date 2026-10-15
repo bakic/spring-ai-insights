@@ -1,7 +1,9 @@
 package io.github.springaiinsights.capture;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import io.github.springaiinsights.metrics.InsightsMetrics;
 import io.github.springaiinsights.model.RetrievalRecord;
@@ -30,8 +32,20 @@ public final class InsightsObservationHandler implements ObservationHandler<Obse
 
     private final InsightsMetrics metrics;
 
-    public InsightsObservationHandler(InsightsMetrics metrics) {
+    private final @Nullable String documentKey;
+
+    /**
+     * @param documentKey metadata key whose value identifies a retrieved document (e.g. {@code source}); when null,
+     * blank or absent from a document, the document ID is used
+     */
+    public InsightsObservationHandler(InsightsMetrics metrics, @Nullable String documentKey) {
         this.metrics = metrics;
+        this.documentKey = documentKey == null || documentKey.isBlank() ? null : documentKey;
+    }
+
+    /** The metadata key used as document key, or null when document IDs are used. */
+    public @Nullable String documentKey() {
+        return documentKey;
     }
 
     @Override
@@ -116,22 +130,32 @@ public final class InsightsObservationHandler implements ObservationHandler<Obse
                 usage == null ? null : usage.getCacheWriteInputTokens(), durationMs, chat.getError());
     }
 
-    private static void recordRetrieval(TurnRecorder recorder, VectorStoreObservationContext store, long durationMs) {
+    private void recordRetrieval(TurnRecorder recorder, VectorStoreObservationContext store, long durationMs) {
         if (!VectorStoreObservationContext.Operation.QUERY.value().equals(store.getOperationName())) {
             return;
         }
         List<Document> documents = store.getQueryResponse() == null ? List.of() : store.getQueryResponse();
         List<Double> scores = new ArrayList<>();
-        List<String> ids = new ArrayList<>();
+        Set<String> ids = new LinkedHashSet<>();
         for (Document document : documents) {
             if (document.getScore() != null) {
                 scores.add(document.getScore());
             }
-            ids.add(document.getId());
+            ids.add(documentKey(document));
         }
         Integer topK = store.getQueryRequest() == null ? null : store.getQueryRequest().getTopK();
-        recorder.addRetrieval(new RetrievalRecord(store.getDatabaseSystem(), topK, documents.size(), scores, ids,
-                durationMs));
+        recorder.addRetrieval(new RetrievalRecord(store.getDatabaseSystem(), topK, documents.size(), scores,
+                List.copyOf(ids), durationMs));
+    }
+
+    private String documentKey(Document document) {
+        if (documentKey != null) {
+            Object value = document.getMetadata().get(documentKey);
+            if (value != null && !value.toString().isBlank()) {
+                return value.toString();
+            }
+        }
+        return document.getId();
     }
 
     private static long durationMs(Observation.Context context) {

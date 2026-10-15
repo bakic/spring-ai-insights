@@ -62,7 +62,7 @@ class InsightsAdvisorTest {
     private TurnTimeouts timeouts;
 
     InsightsAdvisorTest() {
-        registry.observationConfig().observationHandler(new InsightsObservationHandler(metrics));
+        registry.observationConfig().observationHandler(new InsightsObservationHandler(metrics, "source"));
     }
 
     @AfterEach

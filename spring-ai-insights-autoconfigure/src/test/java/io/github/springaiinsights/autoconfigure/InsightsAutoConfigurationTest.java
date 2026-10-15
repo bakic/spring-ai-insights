@@ -68,6 +68,21 @@ class InsightsAutoConfigurationTest {
     }
 
     @Test
+    void documentKeyDefaultsToSource() {
+        runner.run(context -> assertThat(context.getBean(InsightsObservationHandler.class).documentKey())
+            .isEqualTo("source"));
+    }
+
+    @Test
+    void documentKeyIsConfigurable() {
+        runner.withPropertyValues("ai-insights.knowledge.document-key=file_name")
+            .run(context -> assertThat(context.getBean(InsightsObservationHandler.class).documentKey())
+                .isEqualTo("file_name"));
+        runner.withPropertyValues("ai-insights.knowledge.document-key=")
+            .run(context -> assertThat(context.getBean(InsightsObservationHandler.class).documentKey()).isNull());
+    }
+
+    @Test
     void stallTimeoutBinds() {
         runner.withPropertyValues("ai-insights.capture.stall-timeout=5s").run(context -> {
             assertThat(context).hasSingleBean(TurnTimeouts.class);
