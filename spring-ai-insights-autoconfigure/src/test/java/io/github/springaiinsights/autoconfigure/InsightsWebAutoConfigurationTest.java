@@ -2,12 +2,14 @@ package io.github.springaiinsights.autoconfigure;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.Test;
 
 import io.github.springaiinsights.feedback.InsightsFeedback;
+import io.github.springaiinsights.knowledge.KnowledgeCorpusCatalog;
 import io.github.springaiinsights.model.ConversationTurn;
 import io.github.springaiinsights.store.InsightsEventStore;
 import io.github.springaiinsights.store.TurnQuery;
@@ -18,8 +20,14 @@ import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.servlet.function.RouterFunction;
+import org.springframework.web.servlet.function.ServerResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 class InsightsWebAutoConfigurationTest {
 
@@ -121,6 +129,56 @@ class InsightsWebAutoConfigurationTest {
         web.withBean(InsightsEventStore.class, CustomStore::new)
             .withPropertyValues("ai-insights.identity.secret=k")
             .run(context -> assertThat(context).hasNotFailed().doesNotHaveBean("insightsDashboardRoutes"));
+    }
+
+    @Test
+    void traceUrlMustBeHttpTemplate() {
+        for (String url : List.of("javascript:alert(1)/{traceId}", "https://x/", "ftp://x/{traceId}")) {
+            web.withPropertyValues("ai-insights.dashboard.trace-url=" + url)
+                .run(context -> assertThat(context).as(url)
+                    .hasFailed()
+                    .getFailure()
+                    .rootCause()
+                    .hasMessageContaining("ai-insights.dashboard.trace-url"));
+        }
+    }
+
+    @Test
+    void abandonedAfterBelowOneMinuteIsRejected() {
+        web.withPropertyValues("ai-insights.quality.abandoned-after=30s")
+            .run(context -> assertThat(context).hasFailed()
+                .getFailure()
+                .rootCause()
+                .hasMessageContaining("abandoned-after must be at least 1 minute"));
+    }
+
+    @Test
+    void catalogsAndTraceUrlReachDashboard() {
+        KnowledgeCorpusCatalog catalog = new KnowledgeCorpusCatalog() {
+            @Override
+            public String store() {
+                return "kb";
+            }
+
+            @Override
+            public Set<String> documentIds() {
+                return Set.of("d1");
+            }
+        };
+        web.withBean(KnowledgeCorpusCatalog.class, () -> catalog)
+            .withPropertyValues("ai-insights.dashboard.allow-anonymous=true",
+                    "ai-insights.dashboard.trace-url=https://tempo.example/trace/{traceId}")
+            .run(context -> {
+                @SuppressWarnings("unchecked")
+                RouterFunction<ServerResponse> routes = context.getBean("insightsDashboardRoutes",
+                        RouterFunction.class);
+                MockMvc mvc = MockMvcBuilders.routerFunctions(routes).build();
+                mvc.perform(get("/ai-insights/api/config"))
+                    .andExpect(jsonPath("$.traceUrl").value("https://tempo.example/trace/{traceId}"));
+                mvc.perform(get("/ai-insights/api/knowledge"))
+                    .andExpect(jsonPath("$.coverage[0].store").value("kb"))
+                    .andExpect(jsonPath("$.coverage[0].documents").value(1));
+            });
     }
 
     @Test

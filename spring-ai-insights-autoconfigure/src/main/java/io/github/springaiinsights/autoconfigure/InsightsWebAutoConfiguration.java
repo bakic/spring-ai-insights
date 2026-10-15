@@ -4,13 +4,16 @@ import java.time.Clock;
 
 import io.github.springaiinsights.analytics.InsightsAnalytics;
 import io.github.springaiinsights.feedback.InsightsFeedback;
+import io.github.springaiinsights.knowledge.KnowledgeCorpusCatalog;
 import io.github.springaiinsights.metrics.InsightsMetrics;
 import io.github.springaiinsights.pricing.PriceCatalog;
 import io.github.springaiinsights.store.InsightsEventStore;
+import io.github.springaiinsights.web.DashboardOptions;
 import io.github.springaiinsights.web.DashboardPages;
 import io.github.springaiinsights.web.DashboardRoutes;
 import io.github.springaiinsights.web.FeedbackRoutes;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
@@ -45,11 +48,14 @@ public class InsightsWebAutoConfiguration {
     @ConditionalOnBooleanProperty(name = "ai-insights.dashboard.enabled", matchIfMissing = true)
     @Conditional(DashboardAccessCondition.class)
     RouterFunction<ServerResponse> insightsDashboardRoutes(InsightsProperties properties,
-            InsightsAnalytics analytics, InsightsEventStore store, PriceCatalog prices, Environment environment) {
+            InsightsAnalytics analytics, InsightsEventStore store, PriceCatalog prices, Environment environment,
+            ObjectProvider<KnowledgeCorpusCatalog> catalogs) {
         InsightsProperties.Dashboard dashboard = properties.getDashboard();
         Clock clock = Clock.systemUTC();
         DashboardPages pages = new DashboardPages(analytics, store,
-                InsightsAutoConfiguration.application(properties, environment), prices.currency(), clock);
+                InsightsAutoConfiguration.application(properties, environment), prices.currency(), clock,
+                new DashboardOptions(catalogs.orderedStream().toList(),
+                        properties.getQuality().getAbandonedAfter(), dashboard.getTraceUrl()));
         return DashboardRoutes.create(dashboard.getPath(), dashboard.getRole(), dashboard.isAllowAnonymous(), pages,
                 clock);
     }

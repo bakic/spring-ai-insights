@@ -6,13 +6,16 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 
 import io.github.springaiinsights.feedback.Feedback;
 import io.github.springaiinsights.feedback.Rating;
+import io.github.springaiinsights.knowledge.KnowledgeCorpusCatalog;
 import io.github.springaiinsights.model.ConversationTurn;
 import io.github.springaiinsights.model.ModelCall;
 import io.github.springaiinsights.model.RetrievalRecord;
@@ -20,6 +23,7 @@ import io.github.springaiinsights.model.ToolCallRecord;
 import io.github.springaiinsights.model.ToolOutcome;
 import io.github.springaiinsights.model.TurnOutcome;
 import io.github.springaiinsights.store.InMemoryEventStore;
+import org.jspecify.annotations.Nullable;
 
 /** Deterministic, realistic-looking data for {@link DashboardPreview}. */
 final class PreviewData {
@@ -62,6 +66,28 @@ final class PreviewData {
             this.random.nextBytes(bytes);
             this.users.add(hex.formatHex(bytes));
         }
+    }
+
+    /** Documents of the help center, some never retrieved, and a product catalog that is still loading. */
+    static List<KnowledgeCorpusCatalog> catalogs() {
+        Set<String> help = new HashSet<>(List.of(HELP_DOCS));
+        help.addAll(List.of("holiday-hours-2023", "legacy-pricing", "loyalty-program", "store-locations",
+                "privacy-request", "bulk-orders"));
+        return List.of(catalog("help-center", Set.copyOf(help)), catalog("product-catalog", null));
+    }
+
+    private static KnowledgeCorpusCatalog catalog(String store, @Nullable Set<String> ids) {
+        return new KnowledgeCorpusCatalog() {
+            @Override
+            public String store() {
+                return store;
+            }
+
+            @Override
+            public @Nullable Set<String> documentIds() {
+                return ids;
+            }
+        };
     }
 
     static void seed(InMemoryEventStore store, Instant now) {

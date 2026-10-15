@@ -51,6 +51,8 @@ public class InsightsProperties {
 
     private final Knowledge knowledge = new Knowledge();
 
+    private final Quality quality = new Quality();
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -129,6 +131,10 @@ public class InsightsProperties {
 
     public Knowledge getKnowledge() {
         return knowledge;
+    }
+
+    public Quality getQuality() {
+        return quality;
     }
 
     public enum StoreType {
@@ -347,6 +353,8 @@ public class InsightsProperties {
 
         private static final Pattern PATH = Pattern.compile("^(/[A-Za-z0-9._~-]+)+$");
 
+        private static final Pattern TRACE_URL = Pattern.compile("^https?://[^\\s\"'<>]+$");
+
         /** Whether the built-in dashboard and its JSON API are served. */
         private boolean enabled = true;
 
@@ -358,6 +366,12 @@ public class InsightsProperties {
 
         /** Serve the dashboard without Spring Security. Only for local development. */
         private boolean allowAnonymous = false;
+
+        /**
+         * Link from a turn to its trace in your tracing UI (Grafana Tempo, Jaeger, Zipkin...): an http(s) URL with a
+         * {traceId} placeholder. No link when unset.
+         */
+        private @Nullable String traceUrl;
 
         public boolean isEnabled() {
             return enabled;
@@ -392,6 +406,37 @@ public class InsightsProperties {
 
         public void setAllowAnonymous(boolean allowAnonymous) {
             this.allowAnonymous = allowAnonymous;
+        }
+
+        public @Nullable String getTraceUrl() {
+            return traceUrl;
+        }
+
+        public void setTraceUrl(@Nullable String traceUrl) {
+            if (traceUrl != null && !traceUrl.isBlank()
+                    && (!TRACE_URL.matcher(traceUrl).matches() || !traceUrl.contains("{traceId}"))) {
+                throw new IllegalArgumentException(
+                        "ai-insights.dashboard.trace-url must be an http(s) URL containing {traceId}");
+            }
+            this.traceUrl = traceUrl == null || traceUrl.isBlank() ? null : traceUrl;
+        }
+    }
+
+    public static class Quality {
+
+        /** How long a conversation must be idle before it counts as abandoned (at least 1 minute). */
+        private Duration abandonedAfter = Duration.ofMinutes(30);
+
+        public Duration getAbandonedAfter() {
+            return abandonedAfter;
+        }
+
+        public void setAbandonedAfter(Duration abandonedAfter) {
+            if (abandonedAfter.compareTo(Duration.ofMinutes(1)) < 0) {
+                throw new IllegalArgumentException(
+                        "ai-insights.quality.abandoned-after must be at least 1 minute: " + abandonedAfter);
+            }
+            this.abandonedAfter = abandonedAfter;
         }
     }
 

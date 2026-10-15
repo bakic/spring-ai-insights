@@ -454,13 +454,34 @@
     ];
   }
 
+  function coverageSection(coverage) {
+    const note = 'Documents of your knowledge bases that no search returned in this period.';
+    if (coverage.length === 0) {
+      return section('Never retrieved', note, empty('List the documents of an Amazon Bedrock Knowledge Base with '
+        + 'ai-insights.knowledge.bedrock.knowledge-base-ids, or define a KnowledgeCorpusCatalog bean, to see them here.'));
+    }
+    return section('Never retrieved', note, coverage.map((c) => {
+      if (c.documents === null) {
+        return el('div', { class: 'coverage' }, el('h3', { text: c.store }), empty('Catalog not loaded yet.'));
+      }
+      const more = c.neverRetrieved - c.neverRetrievedSample.length;
+      return el('div', { class: 'coverage' },
+        el('h3', { text: c.store }),
+        el('p', { text: `${count(c.neverRetrieved)} of ${count(c.documents)} documents never retrieved` }),
+        c.neverRetrievedSample.length ? el('ul', { class: 'ids' },
+          c.neverRetrievedSample.map((id) => el('li', { class: 'id', text: id }))) : null,
+        more > 0 ? el('p', { class: 'muted', text: `and ${count(more)} more` }) : null);
+    }));
+  }
+
   async function knowledge() {
     const data = await api('knowledge', filterParams());
     if (data.retrievals === 0) {
       return [
         pageHead('Knowledge base', `How often answers used your documents ${PERIOD_TEXT[state.period]}.`),
         empty('No knowledge base searches in this period. Searches are recorded when the assistant queries a '
-          + 'Spring AI VectorStore, for example through a retrieval advisor or a tool.')
+          + 'Spring AI VectorStore, for example through a retrieval advisor or a tool.'),
+        coverageSection(data.coverage)
       ];
     }
     return [
@@ -483,12 +504,20 @@
         { label: 'Average results', num: true, cell: (s) => oneDecimal.format(s.avgResultCount) },
         { label: 'Average best score', num: true, cell: (s) => (s.avgTopScore === null ? '—' : twoDecimals.format(s.avgTopScore)) }
       ], data.stores, 'No store was searched in this period.')),
-      section('Most returned documents', 'Documents that were never returned are not listed yet.', table([
-        { label: 'Document', cell: (d) => el('span', { class: 'id', text: d.documentId }) },
-        { label: 'Store', cell: (d) => d.store },
-        { label: 'Times returned', num: true, cell: (d) => count(d.hits) }
-      ], data.topDocuments, 'Searches in this period returned no document IDs.'))
+      el('div', { class: 'pair' },
+        section('Most returned documents', null, documentTable(data.topDocuments)),
+        section('Least returned documents', 'Returned at least once, fewest times first.',
+          documentTable(data.leastDocuments))),
+      coverageSection(data.coverage)
     ];
+  }
+
+  function documentTable(documents) {
+    return table([
+      { label: 'Document', cell: (d) => el('span', { class: 'id', text: d.documentId }) },
+      { label: 'Store', cell: (d) => d.store },
+      { label: 'Times returned', num: true, cell: (d) => count(d.hits) }
+    ], documents, 'Searches in this period returned no document IDs.');
   }
 
   async function tools() {
@@ -503,10 +532,21 @@
         { label: 'Errors', num: true, cell: (t) => count(t.errors) },
         { label: 'Error rate', num: true, cell: (t) => share(t.errors, t.calls) },
         { label: 'Average duration', num: true, cell: (t) => duration(t.avgDurationMs) },
+        { label: 'p95 duration', num: true, cell: (t) => duration(t.p95DurationMs) },
         { label: 'Repeated in a turn', num: true, cell: (t) => count(t.repeatedCalls) }
-      ], data.tools, 'The model called no tool in this period.')
+      ], data.tools, 'The model called no tool in this period.'),
+      section('Never called in this period', 'Tools offered to the model that it did not call once.',
+        data.neverCalled.length
+          ? el('ul', { class: 'ids' }, data.neverCalled.map((name) => el('li', { text: name })))
+          : empty(data.tools.length ? 'All offered tools were called.' : 'No tool was offered in this period.'))
     ];
   }
+
+  const ABANDON_REASONS = {
+    ERROR: 'Last turn failed',
+    CANCELLED: 'Last turn cancelled',
+    NEGATIVE_FEEDBACK: 'Last answer rated not helpful'
+  };
 
   async function quality() {
     const data = await api('quality', filterParams());
@@ -522,6 +562,10 @@
         },
         { label: 'Failed turns', value: share(s.errorTurns, s.turns), hint: `${count(s.errorTurns)} of ${count(s.turns)}` },
         { label: 'Cancelled turns', value: share(s.cancelledTurns, s.turns), hint: `${count(s.cancelledTurns)} of ${count(s.turns)}` },
+        {
+          label: 'Abandoned conversations', value: share(data.abandoned.count, s.conversations),
+          hint: `${count(data.abandoned.count)} of ${count(s.conversations)} conversations`
+        },
         { label: 'Average latency', value: duration(s.avgLatencyMs) },
         { label: 'Time to first token', value: duration(s.avgTimeToFirstTokenMs), hint: 'streamed answers' }
       ]),
@@ -539,7 +583,14 @@
         { label: 'User', cell: (f) => user(f.userId) },
         { label: 'Comment', cell: (f) => f.comment || el('span', { class: 'muted', text: 'No comment' }) },
         { label: 'Conversation', cell: (f) => conversationLink(f.conversationId, f.application) }
-      ], data.recentNegative, 'No negative rating in this period.'))
+      ], data.recentNegative, 'No negative rating in this period.')),
+      section('Abandoned conversations', 'Conversations that went quiet right after a failed, cancelled or '
+        + 'badly rated answer. Newest first.', table([
+        { label: 'Last turn', cell: (a) => dateTime(a.lastTurnAt) },
+        { label: 'User', cell: (a) => user(a.userId) },
+        { label: 'Why', cell: (a) => ABANDON_REASONS[a.reason] || a.reason },
+        { label: 'Conversation', cell: (a) => conversationLink(a.conversationId) }
+      ], data.abandoned.recent, 'No conversation was abandoned in this period.'))
     ];
   }
 
@@ -594,12 +645,24 @@
         user(t.userId),
         badge(t.outcome),
         el('span', { class: 'muted', text: `${duration(t.latencyMs)}, ${money(t.totalCost)}` }),
-        t.errorType ? el('span', { class: 'muted', text: t.errorType }) : null),
+        t.errorType ? el('span', { class: 'muted', text: t.errorType }) : null,
+        t.traceId ? traceLink(t.traceId) : null),
       messages,
       facts.length ? el('ul', { class: 'facts' }, facts) : null,
       rating ? el('p', { class: 'feedback' },
         badge(rating.rating, rating.rating === 'UP' ? 'helpful' : 'not helpful'),
         rating.comment ? ` ${rating.comment}` : null) : null);
+  }
+
+  function traceLink(traceId) {
+    const template = state.config.traceUrl;
+    if (!template) {
+      return el('span', { class: 'id trace', title: `Trace ${traceId}`, text: `trace ${shortId(traceId)}` });
+    }
+    return el('a', {
+      class: 'id trace', href: template.split('{traceId}').join(encodeURIComponent(traceId)),
+      target: '_blank', rel: 'noopener noreferrer', title: `Open trace ${traceId}`, text: `trace ${shortId(traceId)}`
+    });
   }
 
   function fact(kind, text) {
