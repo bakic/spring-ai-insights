@@ -134,6 +134,17 @@ ChatClient chat = ChatClient.builder(chatModel, observationRegistry, null, null)
 `ChatClient.create(chatModel)` has no observation registry: turns are still recorded, but only with
 the token usage of the final response, provider `unknown`, and no tool or retrieval details.
 
+## Knowledge bases
+
+Every `similaritySearch` on a `VectorStore` is recorded as a retrieval: which store, how many chunks,
+and which documents. A document is identified by its `source` metadata (the file or S3 URI most
+loaders and Amazon Bedrock Knowledge Bases set), else by the chunk ID; several chunks of one document
+count as one hit. Change the key with `ai-insights.knowledge.document-key`.
+
+Stores that emit no observation themselves, such as `BedrockKnowledgeBaseVectorStore`, are wrapped
+so their searches are recorded too. Inject them as `VectorStore`, not as their concrete class; or turn
+the wrapping off with `ai-insights.knowledge.observe-stores=false`.
+
 ## Storage
 
 With Spring Data MongoDB configured in your app (`spring-boot-starter-data-mongodb`, MongoDB 5.0 or
@@ -284,6 +295,8 @@ Ratings appear on the Quality page, next to each turn of a conversation, and in 
 | `ai-insights.identity.pseudonymise` | `true` | HMAC-SHA256 user IDs |
 | `ai-insights.identity.secret` | – | HMAC key; required with a persistent store |
 | `ai-insights.identity.tenant-claim` | `tenant_id` | JWT claim holding the tenant |
+| `ai-insights.knowledge.document-key` | `source` | chunk metadata identifying the document; chunk ID when absent |
+| `ai-insights.knowledge.observe-stores` | `true` | wrap vector stores that emit no observation |
 | `ai-insights.pricing.currency` | `USD` | |
 | `ai-insights.pricing.models[]` | – | `model`, `input`, `output`, `cache-read`, `cache-write`, `input-includes-cached` |
 | `ai-insights.metrics.tenant-tag` | `false` | tag `ai.insights.cost` with tenant (only for a few tenants) |

@@ -24,6 +24,7 @@ import io.github.springaiinsights.store.InsightsEventStore;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientBuilderCustomizer;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
@@ -105,6 +106,14 @@ public class InsightsAutoConfiguration {
     AsyncEventWriter insightsEventWriter(InsightsEventStore store, InsightsProperties properties,
             InsightsMetrics metrics) {
         return new AsyncEventWriter(store, properties.getWriter().getQueueCapacity(), metrics);
+    }
+
+    @Bean
+    @ConditionalOnClass(VectorStore.class)
+    @ConditionalOnBooleanProperty(name = "ai-insights.knowledge.observe-stores", matchIfMissing = true)
+    static ObservingVectorStorePostProcessor insightsObservingVectorStorePostProcessor(
+            ObjectProvider<ObservationRegistry> observationRegistry) {
+        return new ObservingVectorStorePostProcessor(observationRegistry);
     }
 
     @Bean
