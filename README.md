@@ -389,9 +389,26 @@ resolver (`InsightsIdentityResolver`), or the pricing (`PriceCatalog`) with your
 - User IDs are pseudonymised (HMAC-SHA256) before they are stored. Set a stable secret to keep them stable across restarts.
 - Prompt and answer text is **not** recorded unless `ai-insights.capture-content=true`.
 - No user or conversation ID ever becomes a metric tag.
+- Spring AI's own traces are separate: its vector-store spans carry the search query. See the
+  [observability guide](docs/opentelemetry.md#what-leaves-your-application) before exporting them.
+
+## Observability backends
+
+The starter's Micrometer metrics (`ai.insights.*`) and Spring AI's traces can go to the monitoring
+tools you already run:
+
+- **Prometheus and Grafana**: a ready-made
+  [Grafana dashboard](observability/grafana/ai-insights-dashboard.json) (usage, cost and tokens per
+  model, tools, knowledge bases, time to first token, data health) and
+  [Prometheus alert rules](observability/prometheus/ai-insights-alerts.yml) (cost spike, failing
+  tools, empty retrievals, slow first token, lost events). Both are tested against a real
+  Prometheus and Grafana.
+- **OpenTelemetry**: Langfuse, Arize Phoenix, SigNoz, Datadog or any OTLP backend, with
+  `spring-boot-starter-opentelemetry`.
+
+See the [observability guide](docs/opentelemetry.md) for the configuration of each backend.
 
 ## Roadmap
 
-- **Grafana dashboards and release**: Grafana dashboards and alert rules, an OpenTelemetry guide, a
-  demo application, and the first Maven Central release.
+- **Release**: a demo application, continuous integration and the first Maven Central release.
 - A dashboard for WebFlux applications.

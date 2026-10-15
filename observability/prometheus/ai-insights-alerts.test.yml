@@ -1,0 +1,287 @@
+# promtool unit tests for ai-insights-alerts.yml: promtool test rules ai-insights-alerts.test.yml
+rule_files:
+  - ai-insights-alerts.yml
+evaluation_interval: 1m
+tests:
+  # noTrafficNoAlert
+  - name: noTrafficNoAlert
+    interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: AiInsightsCostSpike
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: AiInsightsToolErrorRate
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: AiInsightsEmptyRetrievalRate
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: AiInsightsSlowFirstToken
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: AiInsightsEventsLost
+        exp_alerts: []
+  # idleSeriesNoAlert
+  - name: idleSeriesNoAlert
+    interval: 1m
+    input_series:
+      - series: "ai_insights_cost_total{application=\"shop\",currency=\"USD\",model=\"gpt-4o\"}"
+        values: "0x180"
+      - series: "ai_insights_tool_calls_total{application=\"shop\",outcome=\"success\",tool=\"lookup\"}"
+        values: "0x180"
+      - series: "ai_insights_tool_calls_total{application=\"shop\",outcome=\"error\",tool=\"lookup\"}"
+        values: "0x180"
+      - series: "ai_insights_retrievals_total{application=\"shop\",result=\"hit\",store=\"docs\"}"
+        values: "0x180"
+      - series: "ai_insights_retrievals_total{application=\"shop\",result=\"empty\",store=\"docs\"}"
+        values: "0x180"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"1.0\"}"
+        values: "0x180"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"5.0\"}"
+        values: "0x180"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"10.0\"}"
+        values: "0x180"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"+Inf\"}"
+        values: "0x180"
+      - series: "ai_insights_events_dropped_total{application=\"shop\"}"
+        values: "0x180"
+      - series: "ai_insights_store_errors_total{application=\"shop\"}"
+        values: "0x180"
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: AiInsightsCostSpike
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: AiInsightsToolErrorRate
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: AiInsightsEmptyRetrievalRate
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: AiInsightsSlowFirstToken
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: AiInsightsEventsLost
+        exp_alerts: []
+  # costSpikeFires
+  - name: costSpikeFires
+    interval: 15m
+    input_series:
+      - series: "ai_insights_cost_total{application=\"shop\",currency=\"USD\",model=\"gpt-4o\"}"
+        values: "0+0.025x671 16.8+1.25x8"
+    alert_rule_test:
+      - eval_time: 168h
+        alertname: AiInsightsCostSpike
+        exp_alerts: []
+      - eval_time: 169h
+        alertname: AiInsightsCostSpike
+        exp_alerts:
+          - exp_labels:
+              severity: "warning"
+              application: "shop"
+              currency: "USD"
+            exp_annotations:
+              summary: "AI cost spike in shop"
+              description: "shop spent more than three times its usual hourly amount (USD) in the last hour."
+  # costSpikeNeedsAFloor
+  - name: costSpikeNeedsAFloor
+    interval: 15m
+    input_series:
+      - series: "ai_insights_cost_total{application=\"shop\",currency=\"USD\",model=\"gpt-4o\"}"
+        values: "0x671 0.125+0.125x7"
+    alert_rule_test:
+      - eval_time: 169h
+        alertname: AiInsightsCostSpike
+        exp_alerts: []
+  # costSpikeNeedsAWeekOfHistory: a young application with steady spend has no baseline yet.
+  - name: costSpikeNeedsAWeekOfHistory
+    interval: 15m
+    input_series:
+      - series: "ai_insights_cost_total{application=\"shop\",currency=\"USD\",model=\"gpt-4o\"}"
+        values: "0+1.25x400"
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: AiInsightsCostSpike
+        exp_alerts: []
+      - eval_time: 24h
+        alertname: AiInsightsCostSpike
+        exp_alerts: []
+      - eval_time: 50h
+        alertname: AiInsightsCostSpike
+        exp_alerts: []
+  # restartIsNotASpike
+  # Two instances of one application; instance b restarts at 168h and its counter starts again.
+  - name: restartIsNotASpike
+    interval: 15m
+    input_series:
+      - series: "ai_insights_cost_total{application=\"shop\",currency=\"USD\",model=\"gpt-4o\",instance=\"a\"}"
+        values: "0+1.25x679"
+      - series: "ai_insights_cost_total{application=\"shop\",currency=\"USD\",model=\"gpt-4o\",instance=\"b\"}"
+        values: "0+1.25x671 1.25+1.25x8"
+    alert_rule_test:
+      - eval_time: 168h30m
+        alertname: AiInsightsCostSpike
+        exp_alerts: []
+      - eval_time: 169h
+        alertname: AiInsightsCostSpike
+        exp_alerts: []
+  # toolErrorsFire
+  - name: toolErrorsFire
+    interval: 3m
+    input_series:
+      - series: "ai_insights_tool_calls_total{application=\"shop\",outcome=\"success\",tool=\"lookup\"}"
+        values: "0+3x20"
+      - series: "ai_insights_tool_calls_total{application=\"shop\",outcome=\"error\",tool=\"lookup\"}"
+        values: "0+1x20"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: AiInsightsToolErrorRate
+        exp_alerts:
+          - exp_labels:
+              severity: "warning"
+              application: "shop"
+              tool: "lookup"
+            exp_annotations:
+              summary: "Tool lookup is failing in shop"
+              description: "More than 10% of the calls to lookup in shop failed over the last 15 minutes."
+  # toolErrorsNeedVolume
+  - name: toolErrorsNeedVolume
+    interval: 1m
+    input_series:
+      - series: "ai_insights_tool_calls_total{application=\"shop\",outcome=\"success\",tool=\"lookup\"}"
+        values: "0+0.1x90"
+      - series: "ai_insights_tool_calls_total{application=\"shop\",outcome=\"error\",tool=\"lookup\"}"
+        values: "0+0.1x90"
+    alert_rule_test:
+      - eval_time: 80m
+        alertname: AiInsightsToolErrorRate
+        exp_alerts: []
+  # emptyRetrievalsFire
+  - name: emptyRetrievalsFire
+    interval: 5m
+    input_series:
+      - series: "ai_insights_retrievals_total{application=\"shop\",result=\"hit\",store=\"docs\"}"
+        values: "0+3x36"
+      - series: "ai_insights_retrievals_total{application=\"shop\",result=\"empty\",store=\"docs\"}"
+        values: "0+2x36"
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: AiInsightsEmptyRetrievalRate
+        exp_alerts:
+          - exp_labels:
+              severity: "warning"
+              application: "shop"
+              store: "docs"
+            exp_annotations:
+              summary: "Knowledge base docs often finds nothing in shop"
+              description: "More than 30% of the searches in docs for shop returned no document over the last hour."
+  # emptyRetrievalsNeedVolume
+  - name: emptyRetrievalsNeedVolume
+    interval: 30m
+    input_series:
+      - series: "ai_insights_retrievals_total{application=\"shop\",result=\"hit\",store=\"docs\"}"
+        values: "0+1x6"
+      - series: "ai_insights_retrievals_total{application=\"shop\",result=\"empty\",store=\"docs\"}"
+        values: "0+1x6"
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: AiInsightsEmptyRetrievalRate
+        exp_alerts: []
+  # slowFirstTokenFires
+  - name: slowFirstTokenFires
+    interval: 1m
+    input_series:
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"1.0\"}"
+        values: "0x30"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"5.0\"}"
+        values: "0x30"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"10.0\"}"
+        values: "0+1x30"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"+Inf\"}"
+        values: "0+1x30"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: AiInsightsSlowFirstToken
+        exp_alerts:
+          - exp_labels:
+              severity: "warning"
+              application: "shop"
+            exp_annotations:
+              summary: "Slow first token in shop"
+              description: "Users of shop waited more than 5 seconds for the first token (p95, last 10 minutes)."
+  # fastFirstTokenNoAlert
+  - name: fastFirstTokenNoAlert
+    interval: 1m
+    input_series:
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"1.0\"}"
+        values: "0+1x30"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"5.0\"}"
+        values: "0+1x30"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"10.0\"}"
+        values: "0+1x30"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"+Inf\"}"
+        values: "0+1x30"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: AiInsightsSlowFirstToken
+        exp_alerts: []
+  # slowFirstTokenNeedsVolume: two slow requests in ten minutes are not a trend.
+  - name: slowFirstTokenNeedsVolume
+    interval: 1m
+    input_series:
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"1.0\"}"
+        values: "0x30"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"5.0\"}"
+        values: "0x30"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"10.0\"}"
+        values: "0x5 1x5 2x20"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"+Inf\"}"
+        values: "0x5 1x5 2x20"
+    alert_rule_test:
+      - eval_time: 17m
+        alertname: AiInsightsSlowFirstToken
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: AiInsightsSlowFirstToken
+        exp_alerts: []
+  # eventsLostFires
+  - name: eventsLostFires
+    interval: 1m
+    input_series:
+      - series: "ai_insights_events_dropped_total{application=\"shop\"}"
+        values: "0x2 1x13"
+      - series: "ai_insights_store_errors_total{application=\"shop\"}"
+        values: "0x15"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AiInsightsEventsLost
+        exp_alerts:
+          - exp_labels:
+              severity: "warning"
+              application: "shop"
+            exp_annotations:
+              summary: "AI insights are losing turns in shop"
+              description: "shop lost turns or feedback in the last 10 minutes; check the store and ai-insights.writer.queue-capacity."
+      - eval_time: 16m
+        alertname: AiInsightsEventsLost
+        exp_alerts: []
+  # storeErrorsFire
+  - name: storeErrorsFire
+    interval: 1m
+    input_series:
+      - series: "ai_insights_events_dropped_total{application=\"shop\"}"
+        values: "0x15"
+      - series: "ai_insights_store_errors_total{application=\"shop\"}"
+        values: "0x2 1x13"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: AiInsightsEventsLost
+        exp_alerts:
+          - exp_labels:
+              severity: "warning"
+              application: "shop"
+            exp_annotations:
+              summary: "AI insights are losing turns in shop"
+              description: "shop lost turns or feedback in the last 10 minutes; check the store and ai-insights.writer.queue-capacity."
