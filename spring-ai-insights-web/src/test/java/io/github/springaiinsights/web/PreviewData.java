@@ -29,6 +29,9 @@ final class PreviewData {
     private static final String[] TOOLS = { "searchOrders", "trackParcel", "refund", "updateAddress",
             "escalateToHuman" };
 
+    /** Offered on every turn but never called, so the dashboard has a tool to flag. */
+    private static final String NEVER_CALLED = "cancelSubscription";
+
     private static final double[] TOOL_WEIGHTS = { 0.45, 0.3, 0.12, 0.08, 0.05 };
 
     private static final String[] HELP_DOCS = { "refund-policy", "shipping-times", "return-label", "warranty",
@@ -143,7 +146,14 @@ final class PreviewData {
                 streaming ? 250L + this.random.nextInt(900) : null,
                 outcome == TurnOutcome.SUCCESS ? List.of(finish) : List.of(), calls, tools, retrievals, total, "EUR",
                 Map.of(), content ? exchange[0] : null,
-                content && outcome == TurnOutcome.SUCCESS ? exchange[1] : null);
+                content && outcome == TurnOutcome.SUCCESS ? exchange[1] : null, offeredTools(),
+                "%016x%016x".formatted(this.random.nextLong(), this.random.nextLong()));
+    }
+
+    private static List<String> offeredTools() {
+        List<String> offered = new ArrayList<>(List.of(TOOLS));
+        offered.add(NEVER_CALLED);
+        return offered;
     }
 
     private void feedback(InMemoryEventStore store, ConversationTurn turn) {

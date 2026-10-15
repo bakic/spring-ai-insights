@@ -140,6 +140,15 @@ public final class ContractTurns {
         }
         return new ConversationTurn(id, app, conversation, false, Instant.parse(startedAt), user, tenant,
                 id.equals("T1"), outcome, errorType, latency, ttft, finishReasons, calls, tools, retrievals, total,
-                "USD", id.equals("T1") ? Map.of("channel", "web") : Map.of(), null, null);
+                "USD", id.equals("T1") ? Map.of("channel", "web") : Map.of(), null, null, offeredTools(id),
+                id.equals("T1") ? "4bf92f3577b34da6a3ce929d0e0e4736" : null);
+    }
+
+    private static List<String> offeredTools(String id) {
+        return switch (id) {
+            case "T1" -> List.of("search", "lookup", "refund");
+            case "T2" -> List.of("lookup", "refund");
+            default -> List.of();
+        };
     }
 }

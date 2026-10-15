@@ -11,6 +11,7 @@ import org.apache.commons.logging.LogFactory;
 
 import io.github.springaiinsights.capture.InsightsAdvisor;
 import io.github.springaiinsights.capture.InsightsObservationHandler;
+import io.github.springaiinsights.capture.TraceIdSupplier;
 import io.github.springaiinsights.capture.TurnTimeouts;
 import io.github.springaiinsights.identity.InsightsIdentityResolver;
 import io.github.springaiinsights.identity.Pseudonymiser;
@@ -136,7 +137,7 @@ public class InsightsAutoConfiguration {
             InsightsProperties properties, Environment environment) {
         return new InsightsAdvisor(observationRegistry.getIfUnique(() -> ObservationRegistry.NOOP), identityResolver,
                 pseudonymiser.getIfAvailable(), costs, writer, metrics, application(properties, environment),
-                properties.isCaptureContent(), timeouts);
+                properties.isCaptureContent(), timeouts, TraceIdSupplier.NONE);
     }
 
     @Bean

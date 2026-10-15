@@ -42,7 +42,8 @@ class MongoEventStoreTest {
                 List.of(new ModelCall("bedrock", "m1", 1, 2, 3, 4, 5, new BigDecimal("0.0000012345"), "Timeout")),
                 List.of(new ToolCallRecord("lookup", 7, ToolOutcome.ERROR, "IOException", 2)),
                 List.of(new RetrievalRecord("kb", 4, 2, List.of(0.75, 0.5), List.of("d1", "d2"), 9)),
-                new BigDecimal("0.0000012345"), "EUR", Map.of("a.b", "1", "$x", "2"), "question", "answer");
+                new BigDecimal("0.0000012345"), "EUR", Map.of("a.b", "1", "$x", "2"), "question", "answer",
+                List.of("lookup", "refund"), "4bf92f3577b34da6a3ce929d0e0e4736");
     }
 
     private static ConversationTurn nulls() {
@@ -51,7 +52,7 @@ class MongoEventStoreTest {
                 List.of(new ModelCall("p", "m2", 0, 0, 0, 0, 0, null, null)),
                 List.of(new ToolCallRecord("t", 1, ToolOutcome.SUCCESS, null, 0)),
                 List.of(new RetrievalRecord("kb", null, 0, List.of(), List.of(), 0)), null, "USD", Map.of(), null,
-                null);
+                null, List.of(), null);
     }
 
     private Document raw(String id) {
@@ -68,7 +69,19 @@ class MongoEventStoreTest {
     void nullsRoundTrip() {
         store.save(nulls());
         assertThat(store.findTurn("nulls-1")).contains(nulls());
-        assertThat(raw("nulls-1")).doesNotContainKeys("userMessage", "assistantMessage");
+        assertThat(raw("nulls-1")).doesNotContainKeys("userMessage", "assistantMessage", "traceId");
+    }
+
+    @Test
+    void readsTurnWithoutNewFields() {
+        store.save(full());
+        template.getCollection("ai_insights_turns")
+            .updateOne(new Document("_id", "full-1"),
+                    new Document("$unset", new Document("offeredTools", "").append("traceId", "")));
+        assertThat(store.findTurn("full-1")).get().satisfies(turn -> {
+            assertThat(turn.offeredTools()).isEmpty();
+            assertThat(turn.traceId()).isNull();
+        });
     }
 
     @Test
@@ -91,7 +104,7 @@ class MongoEventStoreTest {
         store.save(ContractTurns.T1);
         ConversationTurn changed = new ConversationTurn(ContractTurns.T1.turnId(), "shop", "c1", false,
                 ContractTurns.T1.startedAt(), "u1", "acme", false, TurnOutcome.SUCCESS, null, 4321, null, List.of(),
-                List.of(), List.of(), List.of(), null, "USD", Map.of(), null, null);
+                List.of(), List.of(), List.of(), null, "USD", Map.of(), null, null, List.of(), null);
         store.save(changed);
         assertThat(template.getCollection("ai_insights_turns").countDocuments()).isEqualTo(1);
         assertThat(store.findTurn("T1")).get().extracting(ConversationTurn::latencyMs).isEqualTo(4321L);

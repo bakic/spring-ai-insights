@@ -38,6 +38,8 @@ import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.core.Ordered;
 
 /**
@@ -74,9 +76,12 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
 
     private final TurnTimeouts timeouts;
 
+    private final TraceIdSupplier traceIds;
+
     public InsightsAdvisor(ObservationRegistry observations, InsightsIdentityResolver identities,
             @Nullable Pseudonymiser pseudonymiser, CostCalculator costs, AsyncEventWriter writer,
-            InsightsMetrics metrics, String application, boolean captureContent, TurnTimeouts timeouts) {
+            InsightsMetrics metrics, String application, boolean captureContent, TurnTimeouts timeouts,
+            TraceIdSupplier traceIds) {
         this.observations = observations;
         this.identities = identities;
         this.pseudonymiser = pseudonymiser;
@@ -86,6 +91,7 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
         this.application = application;
         this.captureContent = captureContent;
         this.timeouts = timeouts;
+        this.traceIds = traceIds;
     }
 
     @Override
@@ -170,11 +176,40 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
                             value.toString());
                 }
             });
+            recorder.offeredTools(offeredTools(request));
+            recorder.traceId(traceId(currentContext));
             ChatClientObservationContext chatClientContext = nearestChatClientContext(currentContext);
             if (chatClientContext != null) {
                 TurnRecorders.attach(chatClientContext, recorder);
             }
             return new Turn(recorder, true);
+        }
+        catch (RuntimeException e) {
+            metrics.internalError();
+            return null;
+        }
+    }
+
+    private List<String> offeredTools(ChatClientRequest request) {
+        try {
+            if (!(request.prompt().getOptions() instanceof ToolCallingChatOptions options)) {
+                return List.of();
+            }
+            List<String> names = new ArrayList<>();
+            for (ToolCallback callback : options.getToolCallbacks()) {
+                names.add(callback.getToolDefinition().name());
+            }
+            return names;
+        }
+        catch (RuntimeException e) {
+            metrics.internalError();
+            return List.of();
+        }
+    }
+
+    private @Nullable String traceId(Observation.@Nullable ContextView current) {
+        try {
+            return traceIds.traceId(current);
         }
         catch (RuntimeException e) {
             metrics.internalError();

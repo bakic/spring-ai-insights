@@ -3,6 +3,7 @@ package io.github.springaiinsights.capture;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -65,6 +66,10 @@ public final class TurnRecorder {
 
     private volatile @Nullable String assistantMessage;
 
+    private volatile List<String> offeredTools = List.of();
+
+    private volatile @Nullable String traceId;
+
     public TurnRecorder(String turnId, String application, Instant startedAt, long startNanos, boolean streaming,
             InsightsIdentity identity, String conversationId, boolean conversationIdMissing, CostCalculator costs) {
         this.turnId = turnId;
@@ -116,6 +121,14 @@ public final class TurnRecorder {
     public void setContent(@Nullable String userMessage, @Nullable String assistantMessage) {
         this.userMessage = userMessage;
         this.assistantMessage = assistantMessage;
+    }
+
+    public void offeredTools(Collection<String> names) {
+        this.offeredTools = List.copyOf(names);
+    }
+
+    public void traceId(@Nullable String traceId) {
+        this.traceId = traceId;
     }
 
     /** A model call of this turn has started; the turn will not finish until it ends. */
@@ -225,7 +238,8 @@ public final class TurnRecorder {
         return Optional.of(new ConversationTurn(turnId, application, conversationId, conversationIdMissing,
                 startedAt, identity.userId(), identity.tenantId(), streaming, outcome, errorType(error),
                 toMillis(endNanos - startNanos), ttft, finishReasons, calls, tools, List.copyOf(retrievals),
-                totalCost(calls), costs.currency(), Map.copyOf(attributes), userMessage, assistantMessage));
+                totalCost(calls), costs.currency(), Map.copyOf(attributes), userMessage, assistantMessage,
+                offeredTools, traceId));
     }
 
     private static @Nullable BigDecimal totalCost(List<ModelCall> calls) {
