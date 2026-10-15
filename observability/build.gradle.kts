@@ -10,4 +10,5 @@ dependencies {
 
 tasks.test {
     inputs.dir("prometheus")
+    inputs.dir("grafana")
 }
