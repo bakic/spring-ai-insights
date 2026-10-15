@@ -1,7 +1,14 @@
 package io.github.springaiinsights.autoconfigure;
 
-import io.github.springaiinsights.metrics.InsightsMetrics;
+import java.time.Clock;
+
+import io.github.springaiinsights.analytics.InsightsAnalytics;
 import io.github.springaiinsights.feedback.InsightsFeedback;
+import io.github.springaiinsights.metrics.InsightsMetrics;
+import io.github.springaiinsights.pricing.PriceCatalog;
+import io.github.springaiinsights.store.InsightsEventStore;
+import io.github.springaiinsights.web.DashboardPages;
+import io.github.springaiinsights.web.DashboardRoutes;
 import io.github.springaiinsights.web.FeedbackRoutes;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -11,6 +18,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
+import org.springframework.core.env.Environment;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 
@@ -28,5 +37,20 @@ public class InsightsWebAutoConfiguration {
     RouterFunction<ServerResponse> insightsFeedbackRoutes(InsightsProperties properties, InsightsFeedback feedback,
             InsightsMetrics metrics) {
         return FeedbackRoutes.create(properties.getDashboard().getPath(), feedback, metrics);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(name = "insightsDashboardRoutes")
+    @ConditionalOnBean({ InsightsAnalytics.class, InsightsEventStore.class, PriceCatalog.class })
+    @ConditionalOnBooleanProperty(name = "ai-insights.dashboard.enabled", matchIfMissing = true)
+    @Conditional(DashboardAccessCondition.class)
+    RouterFunction<ServerResponse> insightsDashboardRoutes(InsightsProperties properties,
+            InsightsAnalytics analytics, InsightsEventStore store, PriceCatalog prices, Environment environment) {
+        InsightsProperties.Dashboard dashboard = properties.getDashboard();
+        Clock clock = Clock.systemUTC();
+        DashboardPages pages = new DashboardPages(analytics, store,
+                InsightsAutoConfiguration.application(properties, environment), prices.currency(), clock);
+        return DashboardRoutes.create(dashboard.getPath(), dashboard.getRole(), dashboard.isAllowAnonymous(), pages,
+                clock);
     }
 }

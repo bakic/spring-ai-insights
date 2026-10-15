@@ -17,6 +17,7 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
+import org.springframework.security.web.SecurityFilterChain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -89,6 +90,44 @@ class InsightsWebAutoConfigurationTest {
             assertThat(context).hasNotFailed();
             assertThat(context.getBean(InsightsProperties.class).getDashboard().getPath()).isEqualTo("/ops/ai");
         });
+    }
+
+    @Test
+    void dashboardWithSpringSecurity() {
+        web.run(context -> assertThat(context).hasBean("insightsDashboardRoutes"));
+    }
+
+    @Test
+    void noSecurityNoDashboard() {
+        web.withClassLoader(new FilteredClassLoader(SecurityFilterChain.class)).run(context -> {
+            assertThat(context).hasNotFailed().doesNotHaveBean("insightsDashboardRoutes");
+            assertThat(context).hasBean("insightsFeedbackRoutes");
+        });
+        web.withClassLoader(new FilteredClassLoader(SecurityFilterChain.class))
+            .withPropertyValues("ai-insights.dashboard.allow-anonymous=true")
+            .run(context -> assertThat(context).hasBean("insightsDashboardRoutes"));
+    }
+
+    @Test
+    void dashboardOffWhenDisabled() {
+        web.withPropertyValues("ai-insights.dashboard.enabled=false").run(context -> {
+            assertThat(context).doesNotHaveBean("insightsDashboardRoutes");
+            assertThat(context).hasBean("insightsFeedbackRoutes");
+        });
+    }
+
+    @Test
+    void noDashboardForCustomStoreWithoutAnalytics() {
+        web.withBean(InsightsEventStore.class, CustomStore::new)
+            .withPropertyValues("ai-insights.identity.secret=k")
+            .run(context -> assertThat(context).hasNotFailed().doesNotHaveBean("insightsDashboardRoutes"));
+    }
+
+    @Test
+    void noDashboardOutsideServletApps() {
+        new ApplicationContextRunner().withConfiguration(CONFIGS)
+            .withBean(SimpleMeterRegistry.class)
+            .run(context -> assertThat(context).doesNotHaveBean("insightsDashboardRoutes"));
     }
 
     static class CustomStore implements InsightsEventStore {
