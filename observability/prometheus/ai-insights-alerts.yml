@@ -12,7 +12,8 @@ groups:
       - alert: AiInsightsCostSpike
         # Cost in the last hour is above 3x the hourly average of the 7 days before it, and above
         # 1 unit of the currency so that a tiny new application does not alert on its first cents.
-        # An application with less than an hour of history has no baseline yet and is not judged.
+        # An application needs 7 days of history for a baseline: younger ones are not judged, since
+        # dividing a shorter history by 168 hours would make any steady spend look like a spike.
         expr: |
           (
             sum by (application, currency) (increase(ai_insights_cost_total[1h]))
@@ -20,6 +21,8 @@ groups:
           )
           and
           sum by (application, currency) (increase(ai_insights_cost_total[1h])) > 1
+          and
+          count by (application, currency) (count_over_time(ai_insights_cost_total[1h] offset 7d))
         for: 15m
         labels:
           severity: warning
@@ -61,11 +64,14 @@ groups:
           description: "More than 30% of the searches in {{ $labels.store }} for {{ $labels.application }} returned no document over the last hour."
 
       - alert: AiInsightsSlowFirstToken
-        # The 95th percentile time to first token is above 5 seconds over 10 minutes.
+        # The 95th percentile time to first token is above 5 seconds over 10 minutes, with at least
+        # 10 streamed answers.
         expr: |
           histogram_quantile(0.95,
             sum by (application, le) (rate(ai_insights_ttft_seconds_bucket[10m]))
           ) > 5
+          and on (application)
+          sum by (application) (increase(ai_insights_ttft_seconds_bucket{le="+Inf"}[10m])) >= 10
         for: 10m
         labels:
           severity: warning

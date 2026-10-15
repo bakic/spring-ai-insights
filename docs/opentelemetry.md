@@ -13,16 +13,28 @@ checked by a test against the metadata of the real Spring Boot and Spring AI jar
 | Signal | Produced by | Contains | Contains no |
 |---|---|---|---|
 | Metrics `ai.insights.*` | this starter | turns, tokens, cost, tool calls, retrievals, feedback, time to first token, data health | user IDs, conversation IDs, prompt or answer text |
-| Spans `chat {model}` | Spring AI | model, token usage (`gen_ai.usage.*`), finish reasons, request options | prompt or answer text |
+| Spans | Spring AI | model calls: model, token usage (`gen_ai.usage.*`), finish reasons, request options. Vector-store searches: **the search query**. Tool calls: arguments and results, only if `spring.ai.tools.observations.include-content` is on | prompt or answer text of model calls |
 | Conversations | this starter | the turns, with content only if `ai-insights.capture-content` is on | – they stay in your store |
 
 Metric tags are low-cardinality by design: `application`, `model`, `type`, `outcome`, `tool`,
 `store`, `rating`, `currency`. The `tenant` tag is added to cost only when
 `ai-insights.metrics.tenant-tag` is on.
 
-Spring AI never writes prompts or answers to spans. Its `spring.ai.chat.observations.log-prompt`
-and `log-completion` switches write them to the **application log** at INFO level. Leave them off in
-production unless your log pipeline is cleared for that data.
+Spring AI keeps prompts and answers off its model-call spans; its `spring.ai.chat.observations.log-prompt`
+and `log-completion` switches write them to the **application log** at INFO level instead. Leave them
+off in production unless your log pipeline is cleared for that data.
+
+Two kinds of span can still carry user text:
+
+- Every vector-store search span has a `db.vector.query.content` attribute holding the search query,
+  and Spring AI has no switch to turn it off. With `QuestionAnswerAdvisor` or any retrieval-augmented
+  setup, that query is usually the user's question.
+- Tool-call spans carry the tool arguments and results when `spring.ai.tools.observations.include-content`
+  is on (it is off by default).
+
+Before sending traces to a third-party service, drop or redact `db.vector.query.content`: with an
+`ObservationFilter` bean in the application, or with an attribute processor in an OpenTelemetry
+Collector placed between the application and the backend.
 
 When Micrometer Tracing is on the classpath, every turn stored by spring-ai-insights carries the
 trace ID of its request. Set `ai-insights.dashboard.trace-url` to jump from a conversation in the
@@ -55,10 +67,10 @@ Then point Prometheus at `/actuator/prometheus` and load the two assets:
 
 | Alert | Fires when |
 |---|---|
-| `AiInsightsCostSpike` | the last hour cost more than 3× the hourly average of the previous 7 days (and more than 1 unit) |
+| `AiInsightsCostSpike` | the last hour cost more than 3× the hourly average of the previous 7 days (and more than 1 unit); applications with less than 7 days of history are not judged |
 | `AiInsightsToolErrorRate` | more than 10% of a tool's calls failed over 15 minutes (at least 10 calls) |
 | `AiInsightsEmptyRetrievalRate` | more than 30% of a knowledge base's searches returned nothing over an hour (at least 20 searches) |
-| `AiInsightsSlowFirstToken` | the 95th percentile time to first token was above 5 seconds over 10 minutes |
+| `AiInsightsSlowFirstToken` | the 95th percentile time to first token was above 5 seconds over 10 minutes (at least 10 streamed answers) |
 | `AiInsightsEventsLost` | turns were dropped (queue full) or could not be written to the store |
 
 Both assets are tested against a real Prometheus and Grafana: every panel query must return data
@@ -193,8 +205,10 @@ management:
   example with `DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT=0.0.0.0:4318`).
 - Datadog [works best with delta temporality](https://docs.datadoghq.com/opentelemetry/guide/otlp_delta_temporality/)
   for counters and histograms, hence `aggregation-temporality: delta`.
-- Datadog's LLM Observability reads spans that follow the OpenTelemetry GenAI conventions 1.37 or
-  later; follow the second source above to have Spring AI's spans appear there.
+- Spans and metrics land in Datadog APM and metrics. Datadog's LLM Observability product only
+  reads spans that follow the OpenTelemetry GenAI conventions 1.37 or later. Spring AI 2.0.1 emits
+  an earlier version of them (for example `gen_ai.system` instead of `gen_ai.provider.name`), so do
+  not expect its spans to appear there yet.
 
 ## When vendor docs do not match
 

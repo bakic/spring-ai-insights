@@ -95,6 +95,22 @@ tests:
       - eval_time: 169h
         alertname: AiInsightsCostSpike
         exp_alerts: []
+  # costSpikeNeedsAWeekOfHistory: a young application with steady spend has no baseline yet.
+  - name: costSpikeNeedsAWeekOfHistory
+    interval: 15m
+    input_series:
+      - series: "ai_insights_cost_total{application=\"shop\",currency=\"USD\",model=\"gpt-4o\"}"
+        values: "0+1.25x400"
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: AiInsightsCostSpike
+        exp_alerts: []
+      - eval_time: 24h
+        alertname: AiInsightsCostSpike
+        exp_alerts: []
+      - eval_time: 50h
+        alertname: AiInsightsCostSpike
+        exp_alerts: []
   # restartIsNotASpike
   # Two instances of one application; instance b restarts at 168h and its counter starts again.
   - name: restartIsNotASpike
@@ -208,6 +224,25 @@ tests:
       - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"+Inf\"}"
         values: "0+1x30"
     alert_rule_test:
+      - eval_time: 25m
+        alertname: AiInsightsSlowFirstToken
+        exp_alerts: []
+  # slowFirstTokenNeedsVolume: two slow requests in ten minutes are not a trend.
+  - name: slowFirstTokenNeedsVolume
+    interval: 1m
+    input_series:
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"1.0\"}"
+        values: "0x30"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"5.0\"}"
+        values: "0x30"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"10.0\"}"
+        values: "0x5 1x5 2x20"
+      - series: "ai_insights_ttft_seconds_bucket{application=\"shop\",le=\"+Inf\"}"
+        values: "0x5 1x5 2x20"
+    alert_rule_test:
+      - eval_time: 17m
+        alertname: AiInsightsSlowFirstToken
+        exp_alerts: []
       - eval_time: 25m
         alertname: AiInsightsSlowFirstToken
         exp_alerts: []

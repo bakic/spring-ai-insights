@@ -389,6 +389,8 @@ resolver (`InsightsIdentityResolver`), or the pricing (`PriceCatalog`) with your
 - User IDs are pseudonymised (HMAC-SHA256) before they are stored. Set a stable secret to keep them stable across restarts.
 - Prompt and answer text is **not** recorded unless `ai-insights.capture-content=true`.
 - No user or conversation ID ever becomes a metric tag.
+- Spring AI's own traces are separate: its vector-store spans carry the search query. See the
+  [observability guide](docs/opentelemetry.md#what-leaves-your-application) before exporting them.
 
 ## Observability backends
 
