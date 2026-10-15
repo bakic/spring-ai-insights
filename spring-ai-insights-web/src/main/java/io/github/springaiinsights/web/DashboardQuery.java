@@ -22,6 +22,11 @@ public final class DashboardQuery {
 
     static final Duration MAX_RANGE = Duration.ofDays(366);
 
+    // Keeps date arithmetic (previous period, month boundaries) and store conversions away from overflow.
+    private static final Instant EARLIEST = Instant.parse("0000-01-01T00:00:00Z");
+
+    private static final Instant LATEST = Instant.parse("9999-12-31T23:59:59Z");
+
     private DashboardQuery() {
     }
 
@@ -60,7 +65,11 @@ public final class DashboardQuery {
 
     private static Instant instant(String name, String value) {
         try {
-            return Instant.parse(value);
+            Instant instant = Instant.parse(value);
+            if (instant.isBefore(EARLIEST) || instant.isAfter(LATEST)) {
+                throw new IllegalArgumentException("invalid " + name + ": " + value);
+            }
+            return instant;
         }
         catch (DateTimeException e) {
             throw new IllegalArgumentException("invalid " + name + ": " + value);

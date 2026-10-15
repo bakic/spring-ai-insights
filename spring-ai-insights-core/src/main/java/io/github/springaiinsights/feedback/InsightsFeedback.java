@@ -55,7 +55,8 @@ public final class InsightsFeedback {
         if (text != null && text.length() > MAX_COMMENT_LENGTH) {
             throw new IllegalArgumentException("comment must not exceed " + MAX_COMMENT_LENGTH + " characters");
         }
-        Optional<ConversationTurn> found = turns.findTurn(turnId).or(() -> writer.pending(turnId));
+        // Writer first: a turn leaves the writer only once it is in the store, so this order has no gap.
+        Optional<ConversationTurn> found = writer.pending(turnId).or(() -> turns.findTurn(turnId));
         if (found.isEmpty()) {
             return false;
         }

@@ -211,6 +211,21 @@
     return { text: `${rising ? '▲' : '▼'} ${percent.format(Math.abs(change))} vs previous period`, cls };
   }
 
+  /** Change of a rate in percentage points; a rise is bad. */
+  function rateDelta(part, whole, previousPart, previousWhole) {
+    if (!whole || !previousWhole) {
+      return null;
+    }
+    const points = (ratio(part, whole) - ratio(previousPart, previousWhole)) * 100;
+    if (Math.abs(points) < 0.05) {
+      return { text: 'same as the previous period', cls: '' };
+    }
+    return {
+      text: `${points > 0 ? '▲' : '▼'} ${oneDecimal.format(Math.abs(points))} pts vs previous period`,
+      cls: points > 0 ? 'bad' : 'good'
+    };
+  }
+
   function ledger(items) {
     return el('dl', { class: 'ledger' }, items.map((item) => el('div', { class: 'kpi' },
       el('dt', { text: item.label }),
@@ -346,7 +361,7 @@
         },
         {
           label: 'Failed turns', value: share(now.errorTurns, now.turns),
-          delta: delta(now.errorTurns, before.errorTurns, 'up-is-bad'), hint: `${count(now.errorTurns)} of ${count(now.turns)}`
+          delta: rateDelta(now.errorTurns, now.turns, before.errorTurns, before.turns), hint: `${count(now.errorTurns)} of ${count(now.turns)}`
         }
       ]),
       el('div', { class: 'pair' },

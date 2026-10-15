@@ -76,6 +76,12 @@ class DashboardQueryTest {
         assertThatIllegalArgumentException()
             .isThrownBy(() -> parse(Map.of("from", "2025-10-01T00:00:00Z", "to", "2026-10-02T00:00:01Z")))
             .withMessage("range must not exceed 366 days");
+        assertThatIllegalArgumentException()
+            .isThrownBy(() -> parse(Map.of("from", "-1000000000-01-01T00:00:00Z", "to", "2026-10-02T00:00:00Z")))
+            .withMessage("invalid from: -1000000000-01-01T00:00:00Z");
+        assertThatIllegalArgumentException()
+            .isThrownBy(() -> parse(Map.of("from", "9999-12-31T00:00:00Z", "to", "+10000-01-01T00:00:00Z")))
+            .withMessage("invalid to: +10000-01-01T00:00:00Z");
     }
 
     @Test

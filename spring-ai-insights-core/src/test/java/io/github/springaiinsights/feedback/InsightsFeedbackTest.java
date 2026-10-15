@@ -164,4 +164,53 @@ class InsightsFeedbackTest {
         }
         assertThat(store.conversationFeedback("shop", "c1")).hasSize(1);
     }
+
+    @Test
+    void turnSavedWhileLookingItUpAcceptsFeedback() throws InterruptedException {
+        var saving = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var saved = new java.util.concurrent.atomic.AtomicReference<ConversationTurn>();
+        var writerRef = new java.util.concurrent.atomic.AtomicReference<AsyncEventWriter>();
+        InsightsEventStore racing = new InsightsEventStore() {
+            @Override
+            public void save(ConversationTurn turn) {
+                saving.countDown();
+                try {
+                    release.await(5, TimeUnit.SECONDS);
+                }
+                catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                saved.set(turn);
+            }
+
+            // Reads the store before the save commits, then returns only after the writer has finished it.
+            @Override
+            public Optional<ConversationTurn> findTurn(String turnId) {
+                Optional<ConversationTurn> snapshot = Optional.ofNullable(saved.get());
+                release.countDown();
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                while (writerRef.get().pending(turnId).isPresent() && System.nanoTime() < deadline) {
+                    Thread.onSpinWait();
+                }
+                return snapshot;
+            }
+
+            @Override
+            public List<ConversationTurn> findTurns(TurnQuery query) {
+                return List.of();
+            }
+        };
+        try (var racingWriter = new AsyncEventWriter(racing, 10, metrics)) {
+            writerRef.set(racingWriter);
+            var service = new InsightsFeedback(racing, store, racingWriter, pseudonymiser, metrics,
+                    Clock.fixed(NOW, ZoneOffset.UTC));
+            racingWriter.submit(turn("t1", pseudonymiser.pseudonymise("alice")));
+            assertThat(saving.await(5, TimeUnit.SECONDS)).isTrue();
+
+            assertThat(service.submit("t1", "alice", Rating.UP, null)).isTrue();
+            release.countDown();
+        }
+        assertThat(store.conversationFeedback("shop", "c1")).hasSize(1);
+    }
 }

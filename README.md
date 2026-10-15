@@ -264,6 +264,9 @@ or use your own `InsightsIdentityResolver`), call the Java API with the same raw
 boolean saved = insightsFeedback.submit(turnId, userId, Rating.UP, comment);  // false: unknown turn or other user
 ```
 
+With the in-memory store, a rating must reach the instance that recorded the turn (one instance or
+sticky sessions); otherwise it gets `404`. Use MongoDB when several instances serve the chat.
+
 Ratings appear on the Quality page, next to each turn of a conversation, and in the
 `ai.insights.feedback` counter. Turn the endpoint off with `ai-insights.feedback.enabled=false`.
 
