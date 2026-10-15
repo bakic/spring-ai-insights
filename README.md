@@ -202,6 +202,21 @@ The documents are listed at startup and every hour with the Bedrock Agent API
 used when you define one. Missing credentials or region never fail startup: failures are logged, each
 knowledge base keeps its previous list, and listing is retried at the next refresh.
 
+If you query the knowledge base with the AWS SDK `BedrockAgentRuntimeClient` directly, rather than
+through Spring AI, the same module records those searches as well. Every `BedrockAgentRuntimeClient`
+bean is observed: each `retrieve` call, and each `retrieveAndGenerate` call on a knowledge base, is
+recorded as a `bedrock_knowledge_base` retrieval on the current turn. No knowledge base IDs are
+needed for this. A few things to know:
+
+- **`retrieve`**: records every returned chunk with its score.
+- **`retrieveAndGenerate`**: Bedrock returns only the chunks cited in the answer, and without
+  scores. So each cited chunk is recorded once, with no score.
+- **Top K**: recorded only when the request sets `numberOfResults`.
+- **Not observed**: paginators, the async client, and `retrieveAndGenerate` on external sources.
+
+Clients are observed only when they are Spring beans, so inject the client as
+`BedrockAgentRuntimeClient`. Turn this off with `ai-insights.knowledge.observe-stores=false`.
+
 For other stores, define a `KnowledgeCorpusCatalog` bean: its `store()` is the store name shown on
 the Knowledge base page, and `documentIds()` returns the IDs the `document-key` metadata takes
 (`null` while not loaded yet).
@@ -394,7 +409,7 @@ Ratings appear on the Quality page, next to each turn of a conversation, and in 
 | `ai-insights.identity.secret` | – | HMAC key; required with a persistent store |
 | `ai-insights.identity.tenant-claim` | `tenant_id` | JWT claim holding the tenant |
 | `ai-insights.knowledge.document-key` | `source` | chunk metadata identifying the document; chunk ID when absent |
-| `ai-insights.knowledge.observe-stores` | `true` | wrap vector stores that emit no observation |
+| `ai-insights.knowledge.observe-stores` | `true` | wrap vector stores and `BedrockAgentRuntimeClient` beans that emit no observation |
 | `ai-insights.knowledge.bedrock.knowledge-base-ids` | – | Bedrock Knowledge Bases whose documents are listed |
 | `ai-insights.knowledge.bedrock.region` | `spring.ai.bedrock.aws.region`, else SDK default | region of those knowledge bases |
 | `ai-insights.knowledge.bedrock.refresh` | `1h` | how often the document list is refreshed (≥ 1m) |
