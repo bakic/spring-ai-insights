@@ -1,14 +1,18 @@
 package io.github.springaiinsights.autoconfigure;
 
 import java.math.BigDecimal;
+import java.net.URI;
 import java.time.Duration;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 import org.jspecify.annotations.Nullable;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.scheduling.support.CronExpression;
 
 /** Configuration of Spring AI Insights, bound from {@code ai-insights.*}. */
 @ConfigurationProperties(InsightsProperties.PREFIX)
@@ -52,6 +56,8 @@ public class InsightsProperties {
     private final Knowledge knowledge = new Knowledge();
 
     private final Quality quality = new Quality();
+
+    private final Report report = new Report();
 
     public boolean isEnabled() {
         return enabled;
@@ -135,6 +141,10 @@ public class InsightsProperties {
 
     public Quality getQuality() {
         return quality;
+    }
+
+    public Report getReport() {
+        return report;
     }
 
     public enum StoreType {
@@ -525,6 +535,125 @@ public class InsightsProperties {
             public void setRefresh(Duration refresh) {
                 this.refresh = refresh;
             }
+        }
+    }
+
+    public static class Report {
+
+        /** Whether the weekly report is sent (when a channel is configured). */
+        private boolean enabled = true;
+
+        /** When the report is sent: a Spring cron expression, evaluated in the report zone. */
+        private String cron = "0 0 8 * * MON";
+
+        /** Time zone of the report's days and of the cron expression. Defaults to the JVM zone. */
+        private @Nullable ZoneId zone;
+
+        /** Slack incoming webhook URL. A secret: set it from an environment variable. */
+        private @Nullable String slackWebhook;
+
+        /** Email recipients; needs spring-boot-starter-mail. */
+        private List<String> emailTo = new ArrayList<>();
+
+        /** Email sender address. Defaults to the mail server's. */
+        private @Nullable String emailFrom;
+
+        /** Public URL of the dashboard, linked from the report. */
+        private @Nullable URI dashboardUrl;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getCron() {
+            return cron;
+        }
+
+        public void setCron(String cron) {
+            if (cron == null || !CronExpression.isValidExpression(cron)) {
+                throw new IllegalArgumentException(
+                        "ai-insights.report.cron must be a Spring cron expression such as 0 0 8 * * MON: " + cron);
+            }
+            this.cron = cron;
+        }
+
+        public @Nullable ZoneId getZone() {
+            return zone;
+        }
+
+        public void setZone(@Nullable ZoneId zone) {
+            this.zone = zone;
+        }
+
+        /** Bound as text and validated when used: a bind failure would print the secret. */
+        public @Nullable String getSlackWebhook() {
+            return slackWebhook;
+        }
+
+        public void setSlackWebhook(@Nullable String slackWebhook) {
+            this.slackWebhook = slackWebhook;
+        }
+
+        /**
+         * The Slack webhook as an absolute http(s) URL; the failure message never contains the value.
+         * @throws IllegalStateException when it is not one
+         */
+        URI slackWebhookUri() {
+            String message = "ai-insights.report.slack-webhook must be an absolute http(s) URL";
+            URI uri;
+            try {
+                uri = URI.create(slackWebhook == null ? "" : slackWebhook.strip());
+            }
+            catch (IllegalArgumentException ex) {
+                throw new IllegalStateException(message);
+            }
+            try {
+                return Objects.requireNonNull(httpUrl(uri, "slack-webhook"));
+            }
+            catch (IllegalArgumentException | NullPointerException ex) {
+                throw new IllegalStateException(message);
+            }
+        }
+
+        public List<String> getEmailTo() {
+            return emailTo;
+        }
+
+        public void setEmailTo(List<String> emailTo) {
+            this.emailTo = emailTo;
+        }
+
+        public @Nullable String getEmailFrom() {
+            return emailFrom;
+        }
+
+        public void setEmailFrom(@Nullable String emailFrom) {
+            this.emailFrom = emailFrom;
+        }
+
+        public @Nullable URI getDashboardUrl() {
+            return dashboardUrl;
+        }
+
+        public void setDashboardUrl(@Nullable URI dashboardUrl) {
+            this.dashboardUrl = httpUrl(dashboardUrl, "dashboard-url");
+        }
+
+        /** Rejects anything but an absolute http(s) URL; the message never contains the value (it may be secret). */
+        private static @Nullable URI httpUrl(@Nullable URI uri, String name) {
+            if (uri == null || uri.toString().isEmpty()) {
+                return null;
+            }
+            String scheme = uri.getScheme();
+            if (!uri.isAbsolute() || uri.getHost() == null
+                    || !("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))) {
+                throw new IllegalArgumentException("ai-insights.report." + name + " must be an absolute http(s) URL");
+            }
+            return uri;
         }
     }
 }

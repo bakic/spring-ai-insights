@@ -261,6 +261,35 @@ Without Spring Security the dashboard is **off**, unless you set `ai-insights.da
 - Try it with generated data: `./gradlew :spring-ai-insights-web:previewDashboard`, then open
   http://localhost:8089/ai-insights/.
 
+## Weekly report
+
+Every Monday at 08:00, a short summary of last week goes to Slack and/or by email, for people who
+never open the dashboard: active users, conversations, cost and cost per conversation, positive
+feedback, knowledge-base queries with no result, the top five tools, each compared with the week
+before, and the projected cost for the month.
+
+```yaml
+ai-insights:
+  report:
+    slack-webhook: ${SLACK_WEBHOOK}          # a Slack incoming webhook
+    email-to: [cto@example.com, product@example.com]
+    email-from: ai-insights@example.com
+    dashboard-url: https://app.example.com/ai-insights/
+    zone: Europe/Paris
+```
+
+- **The webhook URL is a secret.** Set it from an environment variable or your secret store; it is
+  never logged, even when Slack is unreachable.
+- **Email** needs `spring-boot-starter-mail` and `spring.mail.*`; without a `JavaMailSender`,
+  startup fails.
+- **Sent once**, however many instances run: with MongoDB, the first instance to claim the week
+  sends it. With the in-memory store, each instance sends its own; with your own store, implement
+  `ReportLock` on it or declare a `ReportLock` bean.
+- The week is the seven calendar days before the run, in `zone`. Each application sends its own
+  report, covering all tenants. A failing channel never stops the other one, nor the application.
+- Read it any time, behind the dashboard's access check: `GET {path}/report` (HTML) and
+  `GET {path}/api/report` (JSON); add `?app=` for another application.
+
 ## Feedback
 
 Let users rate an answer with thumbs up or down. Every turn has an ID; send it to your front end
@@ -344,6 +373,13 @@ Ratings appear on the Quality page, next to each turn of a conversation, and in 
 | `ai-insights.dashboard.trace-url` | – | link to a turn's trace: an http(s) URL containing `{traceId}` |
 | `ai-insights.quality.abandoned-after` | `30m` | idle time before a conversation can count as abandoned (≥ 1m) |
 | `ai-insights.feedback.enabled` | `true` | serve `POST {path}/feedback` |
+| `ai-insights.report.enabled` | `true` | send the weekly report when a channel is configured |
+| `ai-insights.report.cron` | `0 0 8 * * MON` | when the report is sent (Spring cron, in `zone`) |
+| `ai-insights.report.zone` | JVM zone | time zone of the report's days and of `cron` |
+| `ai-insights.report.slack-webhook` | – | Slack incoming webhook URL (secret) |
+| `ai-insights.report.email-to` | – | email recipients (needs `spring-boot-starter-mail`) |
+| `ai-insights.report.email-from` | mail server default | email sender address |
+| `ai-insights.report.dashboard-url` | – | dashboard link included in the report |
 
 Every bean is `@ConditionalOnMissingBean`: replace the store (`InsightsEventStore`), the identity
 resolver (`InsightsIdentityResolver`), or the pricing (`PriceCatalog`) with your own.
@@ -356,6 +392,6 @@ resolver (`InsightsIdentityResolver`), or the pricing (`PriceCatalog`) with your
 
 ## Roadmap
 
-- **Plan 4: weekly report, Grafana dashboards and release**: an email/Slack summary for managers,
-  Grafana dashboards and alert rules, a demo application, and the first Maven Central release.
+- **Grafana dashboards and release**: Grafana dashboards and alert rules, an OpenTelemetry guide, a
+  demo application, and the first Maven Central release.
 - A dashboard for WebFlux applications.

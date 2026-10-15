@@ -6,9 +6,13 @@ import java.time.Clock;
 import java.util.function.Function;
 
 import io.github.springaiinsights.analytics.InsightsFilter;
+import io.github.springaiinsights.report.ReportFormat;
+import io.github.springaiinsights.report.WeeklyReport;
+import io.github.springaiinsights.report.WeeklyReports;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.jspecify.annotations.Nullable;
 
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
@@ -33,6 +37,10 @@ public final class DashboardRoutes {
     static final String CONTENT_SECURITY_POLICY = "default-src 'none'; script-src 'self'; style-src 'self'; "
             + "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
+    /** The report page has no script and inline styles only, so that it also renders as an email. */
+    static final String REPORT_CONTENT_SECURITY_POLICY = "default-src 'none'; style-src 'unsafe-inline'; "
+            + "frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
+
     static final int MAX_ID_LENGTH = 200;
 
     /** Outside {@code static/} and {@code META-INF/resources/}: only these routes, behind the access check, serve it. */
@@ -45,6 +53,11 @@ public final class DashboardRoutes {
 
     public static RouterFunction<ServerResponse> create(String path, String role, boolean allowAnonymous,
             DashboardPages pages, Clock clock) {
+        return create(path, role, allowAnonymous, pages, clock, null);
+    }
+
+    public static RouterFunction<ServerResponse> create(String path, String role, boolean allowAnonymous,
+            DashboardPages pages, Clock clock, @Nullable WeeklyReports reports) {
         String api = path + "/api";
         RouterFunction<ServerResponse> apiRoutes = RouterFunctions.route()
             .GET(api + "/config", request -> json(pages.config()))
@@ -70,7 +83,32 @@ public final class DashboardRoutes {
             .filter(headers(false))
             .filter(access(role, allowAnonymous))
             .build();
-        return apiRoutes.and(uiRoutes);
+        RouterFunction<ServerResponse> routes = apiRoutes.and(uiRoutes);
+        if (reports == null) {
+            return routes;
+        }
+        RouterFunction<ServerResponse> reportApi = RouterFunctions.route()
+            .GET(api + "/report", request -> report(request, pages, reports, DashboardRoutes::json))
+            .filter(headers(true))
+            .filter(access(role, allowAnonymous))
+            .build();
+        RouterFunction<ServerResponse> reportPage = RouterFunctions.route()
+            .GET(path + "/report", request -> report(request, pages, reports, report -> ServerResponse.ok()
+                .contentType(new MediaType(MediaType.TEXT_HTML, StandardCharsets.UTF_8))
+                .body(ReportFormat.html(report))))
+            .filter(headers(true, REPORT_CONTENT_SECURITY_POLICY))
+            .filter(access(role, allowAnonymous))
+            .build();
+        return routes.and(reportApi).and(reportPage);
+    }
+
+    private static ServerResponse report(ServerRequest request, DashboardPages pages, WeeklyReports reports,
+            Function<WeeklyReport, ServerResponse> render) {
+        String application = DashboardQuery.param(request, "app");
+        if (application != null && application.length() > MAX_ID_LENGTH) {
+            return FeedbackRoutes.error(HttpStatus.BAD_REQUEST, "app is too long");
+        }
+        return render.apply(reports.latest(application == null ? pages.application() : application));
     }
 
     /** Lets the request through only for allowed users: 401 without a principal, 403 without the role. */
@@ -88,7 +126,12 @@ public final class DashboardRoutes {
 
     /** Adds the security headers of every dashboard response; API responses are also never cached. */
     static HandlerFilterFunction<ServerResponse, ServerResponse> headers(boolean noStore) {
-        return (request, next) -> new SecureResponse(next.handle(request), noStore);
+        return headers(noStore, CONTENT_SECURITY_POLICY);
+    }
+
+    private static HandlerFilterFunction<ServerResponse, ServerResponse> headers(boolean noStore,
+            String contentSecurityPolicy) {
+        return (request, next) -> new SecureResponse(next.handle(request), noStore, contentSecurityPolicy);
     }
 
     private static ServerResponse page(ServerRequest request, DashboardPages pages, Clock clock,
@@ -123,7 +166,8 @@ public final class DashboardRoutes {
     }
 
     /** Writes the security headers to the servlet response, then the wrapped response. */
-    private record SecureResponse(ServerResponse delegate, boolean noStore) implements ServerResponse {
+    private record SecureResponse(ServerResponse delegate, boolean noStore, String contentSecurityPolicy)
+            implements ServerResponse {
 
         @Override
         public HttpStatusCode statusCode() {
@@ -143,7 +187,7 @@ public final class DashboardRoutes {
         @Override
         public ModelAndView writeTo(HttpServletRequest request, HttpServletResponse response, Context context)
                 throws ServletException, IOException {
-            response.setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY);
+            response.setHeader("Content-Security-Policy", contentSecurityPolicy);
             response.setHeader("X-Content-Type-Options", "nosniff");
             response.setHeader("Referrer-Policy", "no-referrer");
             if (noStore) {

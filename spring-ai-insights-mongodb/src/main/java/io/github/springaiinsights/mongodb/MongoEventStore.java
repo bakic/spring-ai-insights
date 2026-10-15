@@ -16,6 +16,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.mongodb.ErrorCategory;
+import com.mongodb.MongoWriteException;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.ReplaceOptions;
@@ -40,6 +42,7 @@ import io.github.springaiinsights.feedback.Feedback;
 import io.github.springaiinsights.feedback.FeedbackStore;
 import io.github.springaiinsights.feedback.Rating;
 import io.github.springaiinsights.model.ConversationTurn;
+import io.github.springaiinsights.report.ReportLock;
 import io.github.springaiinsights.store.InsightsEventStore;
 import io.github.springaiinsights.store.TurnQuery;
 import org.apache.commons.logging.Log;
@@ -56,7 +59,7 @@ import org.springframework.data.mongodb.core.MongoOperations;
  * including a TTL index that enforces the retention, are created on the first save rather than at startup, so an
  * unreachable MongoDB never prevents the application from starting.
  */
-public final class MongoEventStore implements InsightsEventStore, FeedbackStore, InsightsAnalytics {
+public final class MongoEventStore implements InsightsEventStore, FeedbackStore, InsightsAnalytics, ReportLock {
 
     private static final Log log = LogFactory.getLog(MongoEventStore.class);
 
@@ -83,6 +86,8 @@ public final class MongoEventStore implements InsightsEventStore, FeedbackStore,
 
     private final String feedbackCollectionName;
 
+    private final String locksCollectionName;
+
     private final Duration retention;
 
     private volatile boolean indexesReady;
@@ -96,6 +101,7 @@ public final class MongoEventStore implements InsightsEventStore, FeedbackStore,
         this.mongo = mongo;
         this.collectionName = collectionPrefix + "turns";
         this.feedbackCollectionName = collectionPrefix + "feedback";
+        this.locksCollectionName = collectionPrefix + "locks";
         this.retention = retention;
     }
 
@@ -107,13 +113,17 @@ public final class MongoEventStore implements InsightsEventStore, FeedbackStore,
         return feedbackCollectionName;
     }
 
+    public String locksCollectionName() {
+        return locksCollectionName;
+    }
+
     public Duration retention() {
         return retention;
     }
 
     /** Creates the indexes now; normally they are created by the first save. */
     public void ensureIndexes() {
-        MongoIndexes.ensure(turns(), feedback(), retention, mongo::executeCommand);
+        MongoIndexes.ensure(turns(), feedback(), locks(), retention, mongo::executeCommand);
         indexesReady = true;
     }
 
@@ -127,6 +137,22 @@ public final class MongoEventStore implements InsightsEventStore, FeedbackStore,
     public void saveFeedback(Feedback entry) {
         ensureIndexesIfDue();
         feedback().replaceOne(Filters.eq("_id", entry.turnId()), FeedbackDocuments.toDocument(entry), UPSERT);
+    }
+
+    /** Inserts the claim; a duplicate key means another instance claimed it first. */
+    @Override
+    public boolean claim(String key, Instant expiresAt) {
+        ensureIndexesIfDue();
+        try {
+            locks().insertOne(new Document("_id", key).append("expiresAt", Date.from(expiresAt)));
+            return true;
+        }
+        catch (MongoWriteException e) {
+            if (e.getError().getCategory() == ErrorCategory.DUPLICATE_KEY) {
+                return false;
+            }
+            throw e;
+        }
     }
 
     /**
@@ -613,6 +639,10 @@ public final class MongoEventStore implements InsightsEventStore, FeedbackStore,
 
     private MongoCollection<Document> feedback() {
         return mongo.getCollection(feedbackCollectionName);
+    }
+
+    private MongoCollection<Document> locks() {
+        return mongo.getCollection(locksCollectionName);
     }
 
     private static List<ConversationTurn> read(Iterable<Document> docs) {
