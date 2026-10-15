@@ -6,9 +6,16 @@ dependencies {
     testImplementation("org.testcontainers:testcontainers-junit-jupiter")
     testImplementation("org.yaml:snakeyaml")
     testImplementation("com.jayway.jsonpath:json-path")
+    // Configuration metadata the OpenTelemetry guide is checked against.
+    testImplementation(project(":spring-ai-insights-autoconfigure"))
+    testImplementation("org.springframework.boot:spring-boot-starter-opentelemetry")
+    testImplementation("org.springframework.boot:spring-boot-starter-actuator")
+    testImplementation("org.springframework.ai:spring-ai-autoconfigure-model-chat-observation")
 }
 
 tasks.test {
     inputs.dir("prometheus")
     inputs.dir("grafana")
+    inputs.file("../docs/opentelemetry.md")
+    inputs.file("../README.md")
 }
