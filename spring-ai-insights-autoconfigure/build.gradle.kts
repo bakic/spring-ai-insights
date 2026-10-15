@@ -1,3 +1,5 @@
+description = "Spring AI Insights auto-configuration for Spring Boot"
+
 val springBootVersion: String by project
 
 dependencies {
@@ -22,6 +24,7 @@ dependencies {
     testImplementation("io.projectreactor:reactor-test")
     testImplementation("io.micrometer:micrometer-tracing-test")
     testImplementation("org.springframework.ai:spring-ai-vector-store")
+    testImplementation("org.springframework.ai:spring-ai-vector-store-advisor")
     testImplementation("org.springframework.ai:spring-ai-autoconfigure-model-tool")
     testImplementation(project(":spring-ai-insights-mongodb"))
     testImplementation("org.springframework.boot:spring-boot-starter-data-mongodb")

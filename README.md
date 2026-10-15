@@ -14,7 +14,8 @@ Every `ChatClient` call (blocking or streaming) becomes a `ConversationTurn`:
 - **who**: user ID (pseudonymised by default) and tenant, from Spring Security or advisor params
 - **conversation**: conversation ID, outcome (`SUCCESS`, `ERROR`, `CANCELLED`), latency, time to first token, finish reasons
 - **model calls**: provider, model, input / output / cache-read / cache-write tokens, cost per call
-- **tool calls**: name, duration, outcome; **retrievals**: vector store, top-k, result count, scores, document IDs
+- **tool calls**: name, duration, outcome (a tool that throws is a failed call, even when Spring AI passes the
+  error message back to the model); **retrievals**: vector store, top-k, result count, scores, document IDs
 - **cost**: total cost of the turn in your configured currency
 - **your attributes**: any key you pass as an advisor param (feature, channel, A/B variant…)
 
@@ -94,6 +95,41 @@ Requirements: Java 21, Spring Boot 4.1, Spring AI 2.0.
        Assistant(ChatClient.Builder builder) { this.chat = builder.build(); }
    }
    ```
+
+## Try the demo
+
+The repository has a helpdesk assistant that uses the starter: a help center searched with
+`QuestionAnswerAdvisor`, three tools (`lookupOrder`, `serviceStatus`, `openTicket`), streaming, and
+feedback. Answers are simulated, so it needs no API key and costs nothing. Twelve simulated customers
+send it questions every two seconds, so the dashboard fills up within a minute.
+
+```bash
+./gradlew :spring-ai-insights-demo:run
+```
+
+Open <http://localhost:8080/ai-insights/> and sign in as `admin` / `admin`. To ask a question yourself:
+
+```bash
+curl -u alice:alice -H 'Content-Type: application/json' \
+  -d '{"conversationId":"c1","question":"Where is my order #10423?"}' \
+  localhost:8080/api/chat
+```
+
+The answer includes a `turnId`. Your turn appears on the dashboard next to the generated traffic.
+Prometheus metrics are at <http://localhost:8080/actuator/prometheus>.
+
+![Overview page of the demo](docs/images/demo-overview.png)
+
+The other pages: [usage](docs/images/demo-usage.png), [cost](docs/images/demo-cost.png),
+[knowledge base](docs/images/demo-knowledge.png), [tools](docs/images/demo-tools.png),
+[quality](docs/images/demo-quality.png) and [one conversation](docs/images/demo-conversation.png).
+
+To run it against a real model, add a Spring AI model starter to `demo/build.gradle.kts` (for example
+`org.springframework.ai:spring-ai-starter-model-openai` with `spring.ai.openai.api-key`), delete
+`SimulatedChatModel.java`, and set `demo.traffic.enabled=false` unless you want to pay for the generated
+questions. Pricing for `gpt-4o` and `gpt-4o-mini` is already configured in `demo/src/main/resources/application.yml`.
+The demo's tests rely on the simulated model, so once it is gone build with
+`./gradlew build -x :spring-ai-insights-demo:test` (or delete `demo/src/test`).
 
 ## Passing context
 
@@ -352,6 +388,7 @@ Ratings appear on the Quality page, next to each turn of a conversation, and in 
 | `ai-insights.retention` | `90d` | how long a persistent store keeps turns (at least 1 minute) |
 | `ai-insights.mongodb.collection-prefix` | `ai_insights_` | collection name prefix |
 | `ai-insights.capture.stall-timeout` | `30s` | how long a finished turn waits for its model call's usage before it is recorded without it |
+| `ai-insights.capture.reactor-context-propagation` | `true` | turn on Reactor's automatic context propagation (JVM-wide), so searches and tool calls Spring AI runs on other threads during a streamed turn count in that turn |
 | `ai-insights.capture-content` | `false` | record prompt and answer text |
 | `ai-insights.identity.pseudonymise` | `true` | HMAC-SHA256 user IDs |
 | `ai-insights.identity.secret` | – | HMAC key; required with a persistent store |
@@ -410,5 +447,5 @@ See the [observability guide](docs/opentelemetry.md) for the configuration of ea
 
 ## Roadmap
 
-- **Release**: a demo application, continuous integration and the first Maven Central release.
+- **Release**: the first Maven Central release. Publishing is set up; see [RELEASING.md](RELEASING.md).
 - A dashboard for WebFlux applications.

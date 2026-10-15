@@ -24,6 +24,7 @@ import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.tool.definition.ToolDefinition;
+import org.springframework.ai.tool.execution.ToolExecutionException;
 import org.springframework.ai.tool.observation.ToolCallingObservationContext;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.observation.VectorStoreObservationContext;
@@ -109,6 +110,16 @@ class InsightsObservationHandlerTest {
         assertThat(tool.name()).isEqualTo("weather");
         assertThat(tool.outcome()).isEqualTo(ToolOutcome.ERROR);
         assertThat(tool.errorType()).isEqualTo("IOException");
+    }
+
+    @Test
+    void toolErrorTypeIsTheCauseOfAToolExecutionException() {
+        var definition = ToolDefinition.builder().name("weather").description("d").inputSchema("{}").build();
+        var ctx = ToolCallingObservationContext.builder().toolDefinition(definition).toolCallArguments("{}").build();
+        var obs = Observation.createNotStarted("tool", () -> ctx, registry).parentObservation(turn).start();
+        obs.error(new ToolExecutionException(definition, new IllegalArgumentException("unknown city")));
+        obs.stop();
+        assertThat(finish().toolCalls().get(0).errorType()).isEqualTo("IllegalArgumentException");
     }
 
     @Test

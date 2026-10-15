@@ -336,6 +336,20 @@ public class InsightsProperties {
          */
         private Duration stallTimeout = Duration.ofSeconds(30);
 
+        /**
+         * Whether to turn on Reactor's automatic context propagation (JVM-wide), so searches and tool calls that
+         * Spring AI runs on other threads during a streamed turn are part of that turn.
+         */
+        private boolean reactorContextPropagation = true;
+
+        public boolean isReactorContextPropagation() {
+            return reactorContextPropagation;
+        }
+
+        public void setReactorContextPropagation(boolean reactorContextPropagation) {
+            this.reactorContextPropagation = reactorContextPropagation;
+        }
+
         public Duration getStallTimeout() {
             return stallTimeout;
         }

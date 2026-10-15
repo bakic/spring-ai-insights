@@ -15,6 +15,7 @@ import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.observation.ChatModelObservationContext;
 import org.springframework.ai.document.Document;
+import org.springframework.ai.tool.execution.ToolExecutionException;
 import org.springframework.ai.tool.observation.ToolCallingObservationContext;
 import org.springframework.ai.vectorstore.observation.VectorStoreObservationContext;
 
@@ -96,7 +97,7 @@ public final class InsightsObservationHandler implements ObservationHandler<Obse
             }
             long durationMs = durationMs(context);
             if (context instanceof ToolCallingObservationContext tool) {
-                recorder.addToolCall(tool.getToolDefinition().name(), durationMs, tool.getError());
+                recorder.addToolCall(tool.getToolDefinition().name(), durationMs, toolError(tool.getError()));
             }
             else if (context instanceof VectorStoreObservationContext store) {
                 recordRetrieval(recorder, store, durationMs);
@@ -105,6 +106,11 @@ public final class InsightsObservationHandler implements ObservationHandler<Obse
         catch (RuntimeException e) {
             metrics.internalError();
         }
+    }
+
+    // Spring AI wraps what a tool threw; the wrapped exception says what went wrong.
+    private static @Nullable Throwable toolError(@Nullable Throwable error) {
+        return error instanceof ToolExecutionException && error.getCause() != null ? error.getCause() : error;
     }
 
     private void endModelCall(TurnRecorder recorder) {

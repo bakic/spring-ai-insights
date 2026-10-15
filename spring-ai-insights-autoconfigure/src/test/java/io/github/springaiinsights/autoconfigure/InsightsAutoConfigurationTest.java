@@ -110,6 +110,25 @@ class InsightsAutoConfigurationTest {
     }
 
     @Test
+    void reactorContextPropagationIsOnByDefault() {
+        runner.run(context -> assertThat(context).hasSingleBean(ReactorContextPropagation.class));
+    }
+
+    @Test
+    void reactorContextPropagationIsTurnedOnEvenWithLazyInitialization() {
+        runner.withInitializer(context -> context
+            .addBeanFactoryPostProcessor(new org.springframework.boot.LazyInitializationBeanFactoryPostProcessor()))
+            .run(context -> assertThat(context.getBeanFactory().containsSingleton("insightsReactorContextPropagation"))
+                .isTrue());
+    }
+
+    @Test
+    void reactorContextPropagationCanBeLeftOff() {
+        runner.withPropertyValues("ai-insights.capture.reactor-context-propagation=false")
+            .run(context -> assertThat(context).doesNotHaveBean(ReactorContextPropagation.class));
+    }
+
+    @Test
     void wrappingCanBeDisabled() {
         runner.withPropertyValues("ai-insights.knowledge.observe-stores=false")
             .withBean("kb", VectorStore.class, PlainStore::new)
@@ -146,6 +165,62 @@ class InsightsAutoConfigurationTest {
                 store.similaritySearch("by text");
                 assertThat(observed).containsExactly("by request", "by text");
             });
+    }
+
+    @Test
+    void toolErrorProcessorInjectedByItsClassKeepsItsTypeAndRecordsErrors() {
+        ObservationRegistry registry = ObservationRegistry.create();
+        registry.observationConfig().observationHandler(context -> true);
+        new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(InsightsAutoConfiguration.class))
+            .withBean(SimpleMeterRegistry.class)
+            .withBean(ObservationRegistry.class, () -> registry)
+            .withBean("toolErrors", OpenToolErrors.class, OpenToolErrors::new)
+            .withBean(ToolErrorsUser.class)
+            .run(context -> {
+                assertThat(context).hasNotFailed();
+                OpenToolErrors processor = context.getBean(ToolErrorsUser.class).processor;
+                assertThat(processor.extra()).isEqualTo("extra");
+                var definition = org.springframework.ai.tool.definition.ToolDefinition.builder()
+                    .name("lookup")
+                    .description("lookup")
+                    .inputSchema("{}")
+                    .build();
+                var toolContext = org.springframework.ai.tool.observation.ToolCallingObservationContext.builder()
+                    .toolDefinition(definition)
+                    .toolCallArguments("{}")
+                    .build();
+                io.micrometer.observation.Observation observation = io.micrometer.observation.Observation
+                    .createNotStarted("tool", () -> toolContext, registry)
+                    .start();
+                try (var scope = observation.openScope()) {
+                    assertThat(processor.process(new org.springframework.ai.tool.execution.ToolExecutionException(
+                            definition, new IllegalStateException("boom")))).isEqualTo("handled");
+                }
+                observation.stop();
+                assertThat(toolContext.getError()).isNotNull();
+            });
+    }
+
+    static class OpenToolErrors
+            implements org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor {
+
+        String extra() {
+            return "extra";
+        }
+
+        @Override
+        public String process(org.springframework.ai.tool.execution.ToolExecutionException exception) {
+            return "handled";
+        }
+    }
+
+    static class ToolErrorsUser {
+
+        final OpenToolErrors processor;
+
+        ToolErrorsUser(OpenToolErrors processor) {
+            this.processor = processor;
+        }
     }
 
     static class OpenStore implements VectorStore {

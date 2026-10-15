@@ -24,12 +24,14 @@ import io.github.springaiinsights.identity.Pseudonymiser;
 import io.github.springaiinsights.model.ConversationTurn;
 import io.github.springaiinsights.model.ModelCall;
 import io.github.springaiinsights.model.ToolCallRecord;
+import io.github.springaiinsights.model.ToolOutcome;
 import io.github.springaiinsights.store.InMemoryEventStore;
 import io.github.springaiinsights.store.InsightsEventStore;
 import io.github.springaiinsights.store.TurnQuery;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientResponse;
+import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -72,6 +74,9 @@ class InsightsEndToEndTest {
     @Autowired
     Tools tools;
 
+    @Autowired
+    SimpleVectorStore vectorStore;
+
     @AfterEach
     void reset() {
         FAIL_SAVES.set(false);
@@ -94,6 +99,18 @@ class InsightsEndToEndTest {
         });
         assertThat(turn.modelCalls()).hasSize(2).extracting(ModelCall::provider).containsOnly("scripted");
         await().atMost(Duration.ofSeconds(5)).until(() -> count("ai.insights.turns") - turnsBefore == 1);
+    }
+
+    @Test
+    void failingToolIsRecordedAsError() {
+        ChatClientResponse response = builder.build().prompt().user("use fail").tools(tools).call().chatClientResponse();
+
+        assertThat(response.chatResponse().getResult().getOutput().getText()).isEqualTo("answer");
+        assertThat(recorded(response).toolCalls()).singleElement().satisfies(call -> {
+            assertThat(call.name()).isEqualTo("fail");
+            assertThat(call.outcome()).isEqualTo(ToolOutcome.ERROR);
+            assertThat(call.errorType()).isEqualTo("IllegalStateException");
+        });
     }
 
     @Test
@@ -217,6 +234,36 @@ class InsightsEndToEndTest {
         assertThat(turn.modelCalls()).hasSize(2);
     }
 
+    @Test
+    void questionAnswerAdvisorSearchIsRecordedOnACalledTurn() {
+        ChatClientResponse response = builder.build()
+            .prompt()
+            .user("hello")
+            .advisors(QuestionAnswerAdvisor.builder(vectorStore).build())
+            .call()
+            .chatClientResponse();
+
+        assertThat(recorded(response).retrievals()).singleElement()
+            .satisfies(r -> assertThat(r.store()).isEqualTo("simple"));
+    }
+
+    @Test
+    void questionAnswerAdvisorSearchIsRecordedOnAStreamedTurn() {
+        List<ChatClientResponse> chunks = builder.build()
+            .prompt()
+            .user("hello")
+            .advisors(QuestionAnswerAdvisor.builder(vectorStore).build())
+            .stream()
+            .chatClientResponse()
+            .collectList()
+            .block(Duration.ofSeconds(10));
+
+        ConversationTurn turn = recorded(chunks.get(0));
+        assertThat(turn.streaming()).isTrue();
+        assertThat(turn.retrievals()).singleElement()
+            .satisfies(r -> assertThat(r.store()).isEqualTo("simple"));
+    }
+
     private ConversationTurn recorded(ChatClientResponse response) {
         String turnId = (String) response.context().get(InsightsContextKeys.TURN_ID);
         assertThat(turnId).isNotBlank();
@@ -261,6 +308,11 @@ class InsightsEndToEndTest {
                 .stream()
                 .map(Document::getText)
                 .collect(Collectors.joining("\n"));
+        }
+
+        @Tool(description = "Always fails")
+        public String fail() {
+            throw new IllegalStateException("tool broke");
         }
 
         @Tool(description = "Tool a")
