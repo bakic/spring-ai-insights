@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: helpdesk-demo
+
+server:
+  port: 8080
+
+demo:
+  traffic:
+    enabled: true
+    interval: 2s
+    seed: 42
+  users:
+    admin-password: admin
+    alice-password: alice
+
+ai-insights:
+  identity:
+    secret: demo-only-secret   # use a real secret from your vault in an application
+  capture-content: true        # the demo's conversations are synthetic
+  pricing:
+    currency: USD
+    models:
+      - model: gpt-4o
+        input: 2.50
+        output: 10.00
+        cache-read: 1.25
+        input-includes-cached: true
+      - model: gpt-4o-mini
+        input: 0.15
+        output: 0.60
+        cache-read: 0.075
+        input-includes-cached: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
