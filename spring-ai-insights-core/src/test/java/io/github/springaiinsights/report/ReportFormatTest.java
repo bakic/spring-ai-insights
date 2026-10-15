@@ -77,6 +77,15 @@ class ReportFormatTest {
     }
 
     @Test
+    void hugeChangeIsCapped() {
+        assertThat(ReportFormat.change(new BigDecimal("700"), new BigDecimal("0.00003"))).isEqualTo(">+9999%");
+        assertThat(ReportFormat.change(10_099, 101)).isEqualTo("+9899%");
+        assertThat(ReportFormat.change(10_100, 101)).isEqualTo("+9900%");
+        assertThat(ReportFormat.change(10_200, 101)).isEqualTo("+9999%");
+        assertThat(ReportFormat.change(10_201, 101)).isEqualTo(">+9999%");
+    }
+
+    @Test
     void pointsChangeSingular() {
         assertThat(ReportFormat.pointsChange(null, 0.5)).isEmpty();
         assertThat(ReportFormat.pointsChange(0.5, null)).isEmpty();

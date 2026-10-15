@@ -86,6 +86,25 @@ class InsightsReportAutoConfigurationTest {
     }
 
     @Test
+    void malformedWebhookIsNeverPrinted() {
+        for (String webhook : new String[] { "hooks.slack.com/services/T/B/s3cr3t",
+                "https://hooks.slack.com/services/T/B/s3cr3t with space" }) {
+            web.withPropertyValues("ai-insights.report.slack-webhook=" + webhook).run(context -> {
+                Throwable failure = context.getStartupFailure();
+                assertThat(failure).isNotNull();
+                StringBuilder text = new StringBuilder();
+                for (Throwable t = failure; t != null; t = t.getCause()) {
+                    assertThat(t).as("a bind failure is reported with its value")
+                        .isNotInstanceOf(org.springframework.boot.context.properties.bind.BindException.class);
+                    text.append(t).append('\n');
+                }
+                assertThat(text.toString()).doesNotContain("s3cr3t")
+                    .contains("ai-insights.report.slack-webhook must be an absolute http(s) URL");
+            });
+        }
+    }
+
+    @Test
     void emailWithoutMailSenderFailsStartup() {
         web.withPropertyValues("ai-insights.report.email-to=ceo@example.com")
             .run(context -> assertThat(context).getFailure().rootCause()

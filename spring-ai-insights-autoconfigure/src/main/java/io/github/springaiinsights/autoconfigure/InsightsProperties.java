@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 import org.jspecify.annotations.Nullable;
@@ -549,7 +550,7 @@ public class InsightsProperties {
         private @Nullable ZoneId zone;
 
         /** Slack incoming webhook URL. A secret: set it from an environment variable. */
-        private @Nullable URI slackWebhook;
+        private @Nullable String slackWebhook;
 
         /** Email recipients; needs spring-boot-starter-mail. */
         private List<String> emailTo = new ArrayList<>();
@@ -588,12 +589,34 @@ public class InsightsProperties {
             this.zone = zone;
         }
 
-        public @Nullable URI getSlackWebhook() {
+        /** Bound as text and validated when used: a bind failure would print the secret. */
+        public @Nullable String getSlackWebhook() {
             return slackWebhook;
         }
 
-        public void setSlackWebhook(@Nullable URI slackWebhook) {
-            this.slackWebhook = httpUrl(slackWebhook, "slack-webhook");
+        public void setSlackWebhook(@Nullable String slackWebhook) {
+            this.slackWebhook = slackWebhook;
+        }
+
+        /**
+         * The Slack webhook as an absolute http(s) URL; the failure message never contains the value.
+         * @throws IllegalStateException when it is not one
+         */
+        URI slackWebhookUri() {
+            String message = "ai-insights.report.slack-webhook must be an absolute http(s) URL";
+            URI uri;
+            try {
+                uri = URI.create(slackWebhook == null ? "" : slackWebhook.strip());
+            }
+            catch (IllegalArgumentException ex) {
+                throw new IllegalStateException(message);
+            }
+            try {
+                return Objects.requireNonNull(httpUrl(uri, "slack-webhook"));
+            }
+            catch (IllegalArgumentException | NullPointerException ex) {
+                throw new IllegalStateException(message);
+            }
         }
 
         public List<String> getEmailTo() {

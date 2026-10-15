@@ -11,9 +11,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.Date;
-
-import com.mongodb.ErrorCategory;
-import com.mongodb.MongoWriteException;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;

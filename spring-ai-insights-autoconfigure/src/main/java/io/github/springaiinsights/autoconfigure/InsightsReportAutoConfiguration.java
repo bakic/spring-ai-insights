@@ -65,7 +65,7 @@ public class InsightsReportAutoConfiguration {
     @Conditional(SlackConfigured.class)
     SlackReportSender insightsSlackReportSender(InsightsProperties properties) {
         HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-        return new SlackReportSender(properties.getReport().getSlackWebhook(), client);
+        return new SlackReportSender(properties.getReport().slackWebhookUri(), client);
     }
 
     @Bean(destroyMethod = "close")

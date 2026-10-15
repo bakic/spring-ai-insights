@@ -27,6 +27,9 @@ public final class ReportFormat {
 
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
+    /** Beyond this, a change (typically against a near-zero week) is shown as a bound. */
+    private static final BigDecimal MAX_PERCENT = BigDecimal.valueOf(9999);
+
     private ReportFormat() {
     }
 
@@ -112,11 +115,11 @@ public final class ReportFormat {
             return now.signum() == 0 ? "no change" : "new";
         }
         BigDecimal before = decimal(previous);
-        int percent = now.subtract(before)
-            .multiply(HUNDRED)
-            .divide(before.abs(), 0, RoundingMode.HALF_UP)
-            .intValueExact();
-        return percent == 0 ? "no change" : signed(percent) + "%";
+        BigDecimal percent = now.subtract(before).multiply(HUNDRED).divide(before.abs(), 0, RoundingMode.HALF_UP);
+        if (percent.abs().compareTo(MAX_PERCENT) > 0) {
+            return (percent.signum() > 0 ? ">" : "<") + signed(percent.signum() * MAX_PERCENT.intValue()) + "%";
+        }
+        return percent.signum() == 0 ? "no change" : signed(percent.intValue()) + "%";
     }
 
     /** The change between two rates in percentage points; empty when either is unknown. */
