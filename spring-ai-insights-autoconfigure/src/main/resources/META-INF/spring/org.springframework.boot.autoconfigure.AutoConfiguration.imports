@@ -3,3 +3,4 @@ io.github.springaiinsights.autoconfigure.InsightsAutoConfiguration
 io.github.springaiinsights.autoconfigure.InsightsFeedbackAutoConfiguration
 io.github.springaiinsights.autoconfigure.InsightsWebAutoConfiguration
 io.github.springaiinsights.autoconfigure.InsightsBedrockAutoConfiguration
+io.github.springaiinsights.autoconfigure.InsightsReportAutoConfiguration

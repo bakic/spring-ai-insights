@@ -13,6 +13,8 @@ dependencies {
     compileOnly("org.springframework.security:spring-security-core")
     compileOnly("org.springframework.security:spring-security-oauth2-jose")
     compileOnly("io.micrometer:micrometer-tracing")
+    compileOnly("org.springframework:spring-context-support")
+    compileOnly("jakarta.mail:jakarta.mail-api")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
     testImplementation("org.springframework.boot:spring-boot-starter-actuator")
     testImplementation("org.springframework.security:spring-security-core")
@@ -33,4 +35,7 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testImplementation("org.springframework.boot:spring-boot-starter-security")
     testImplementation("org.springframework.boot:spring-boot-starter-security-test")
+    testImplementation("org.springframework:spring-context-support")
+    testImplementation("jakarta.mail:jakarta.mail-api")
+    testRuntimeOnly("org.eclipse.angus:angus-mail")
 }
