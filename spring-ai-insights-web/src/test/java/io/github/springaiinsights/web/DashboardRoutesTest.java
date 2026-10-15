@@ -58,6 +58,12 @@ class DashboardRoutesTest {
         mvc.perform(get("/ai-insights/api/cost" + RANGE)).andExpect(jsonPath("$.monthEndProjection").value(0.020488));
         mvc.perform(get("/ai-insights/api/knowledge" + RANGE)).andExpect(jsonPath("$.retrievalTurns").value(2));
         mvc.perform(get("/ai-insights/api/tools" + RANGE)).andExpect(jsonPath("$.tools[0].tool").value("lookup"));
+        mvc.perform(get("/ai-insights/api/tools" + RANGE)).andExpect(jsonPath("$.neverCalled[0]").value("search"))
+            .andExpect(jsonPath("$.offeredRecorded").value(true));
+        mvc.perform(get("/ai-insights/api/knowledge" + RANGE))
+            .andExpect(jsonPath("$.leastDocuments").isArray())
+            .andExpect(jsonPath("$.coverage").isArray());
+        mvc.perform(get("/ai-insights/api/quality" + RANGE)).andExpect(jsonPath("$.abandoned.count").value(2));
         mvc.perform(get("/ai-insights/api/quality" + RANGE + "&app=help"))
             .andExpect(jsonPath("$.recentNegative[0].comment").value("too long"));
         mvc.perform(get("/ai-insights/api/conversation?app=help&id=h1"))

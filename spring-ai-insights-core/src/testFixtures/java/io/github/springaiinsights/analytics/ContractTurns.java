@@ -106,6 +106,13 @@ public final class ContractTurns {
         return List.of(F1, F2, F3, F4, F5);
     }
 
+    /** A successful turn that only called tools; for tests that need data beyond the dataset. */
+    public static ConversationTurn toolTurn(String id, String app, String startedAt, String conversation,
+            List<ToolCallRecord> tools) {
+        return turn(id, app, startedAt, conversation, null, null, TurnOutcome.SUCCESS, null, 100, null, List.of(), tools,
+                List.of());
+    }
+
     private static Feedback feedback(ConversationTurn turn, Rating rating, String comment, String createdAt) {
         return new Feedback(turn.turnId(), turn.application(), turn.conversationId(), turn.userId(), turn.tenantId(),
                 rating, comment, Instant.parse(createdAt));
@@ -140,6 +147,15 @@ public final class ContractTurns {
         }
         return new ConversationTurn(id, app, conversation, false, Instant.parse(startedAt), user, tenant,
                 id.equals("T1"), outcome, errorType, latency, ttft, finishReasons, calls, tools, retrievals, total,
-                "USD", id.equals("T1") ? Map.of("channel", "web") : Map.of(), null, null);
+                "USD", id.equals("T1") ? Map.of("channel", "web") : Map.of(), null, null, offeredTools(id),
+                id.equals("T1") ? "4bf92f3577b34da6a3ce929d0e0e4736" : null);
+    }
+
+    private static List<String> offeredTools(String id) {
+        return switch (id) {
+            case "T1" -> List.of("search", "lookup", "refund");
+            case "T2" -> List.of("lookup", "refund");
+            default -> List.of();
+        };
     }
 }

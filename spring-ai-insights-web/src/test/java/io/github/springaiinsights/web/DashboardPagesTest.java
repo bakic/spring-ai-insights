@@ -7,14 +7,20 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import io.github.springaiinsights.analytics.ContractTurns;
+import io.github.springaiinsights.analytics.AbandonedConversation;
 import io.github.springaiinsights.analytics.DocumentUsage;
 import io.github.springaiinsights.feedback.Feedback;
+import io.github.springaiinsights.knowledge.KnowledgeCorpusCatalog;
 import io.github.springaiinsights.model.ConversationTurn;
 import io.github.springaiinsights.store.InMemoryEventStore;
 import io.github.springaiinsights.store.InsightsEventStore;
 import io.github.springaiinsights.store.TurnQuery;
+import io.github.springaiinsights.web.pages.CorpusCoverage;
 import io.github.springaiinsights.web.pages.CostPage;
 import io.github.springaiinsights.web.pages.DashboardConfig;
 import io.github.springaiinsights.web.pages.KnowledgePage;
@@ -22,6 +28,7 @@ import io.github.springaiinsights.web.pages.OverviewPage;
 import io.github.springaiinsights.web.pages.QualityPage;
 import io.github.springaiinsights.web.pages.TurnRow;
 import io.github.springaiinsights.web.pages.UsagePage;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import static io.github.springaiinsights.analytics.ContractTurns.FROM;
@@ -156,6 +163,94 @@ class DashboardPagesTest {
     }
 
     @Test
+    void toolsNeverCalled() {
+        assertThat(pages().tools(SHOP).neverCalled()).containsExactly("search");
+        assertThat(pages().tools(SHOP).offeredRecorded()).isTrue();
+    }
+
+    @Test
+    void knowledgeHasLeastDocuments() {
+        assertThat(pages().knowledge(HELP).leastDocuments()).first().isEqualTo(new DocumentUsage("faq", "q1", 1));
+    }
+
+    @Test
+    void knowledgeCoverage() {
+        KnowledgePage page = pages(TO, catalog("kb", Set.of("d1", "d2", "d3", "d4"))).knowledge(HELP);
+
+        assertThat(page.coverage()).containsExactly(new CorpusCoverage("kb", 4, 2, List.of("d3", "d4")));
+    }
+
+    @Test
+    void neverRetrievedSampleIsCapped() {
+        Set<String> ids = IntStream.range(0, 60).mapToObj(i -> "x%02d".formatted(i)).collect(Collectors.toSet());
+
+        CorpusCoverage coverage = pages(TO, catalog("kb", ids)).knowledge(HELP).coverage().get(0);
+
+        assertThat(coverage.documents()).isEqualTo(60);
+        assertThat(coverage.neverRetrieved()).isEqualTo(60);
+        assertThat(coverage.neverRetrievedSample()).hasSize(50).startsWith("x00", "x01").endsWith("x49");
+    }
+
+    @Test
+    void unloadedCatalogReportsUnknownSize() {
+        KnowledgePage page = pages(TO, catalog("kb", null)).knowledge(HELP);
+
+        assertThat(page.coverage()).containsExactly(new CorpusCoverage("kb", null, 0, List.of()));
+    }
+
+    @Test
+    void qualityHasAbandoned() {
+        Instant now = Instant.parse("2026-10-02T12:10:00Z");
+        QualityPage page = pages(now).quality(HELP);
+
+        assertThat(page.abandoned().count()).isEqualTo(2);
+        assertThat(page.abandoned().recent()).extracting(AbandonedConversation::conversationId)
+            .containsExactly("h2", "h1");
+    }
+
+    @Test
+    void configCarriesTraceUrl() {
+        DashboardOptions options = new DashboardOptions(List.of(), Duration.ofMinutes(30),
+                "https://tempo.example/trace/{traceId}");
+
+        assertThat(new DashboardPages(store, store, "shop", "USD", Clock.systemUTC(), options).config().traceUrl())
+            .isEqualTo("https://tempo.example/trace/{traceId}");
+        assertThat(pages().config().traceUrl()).isNull();
+    }
+
+    @Test
+    void optionsAreValidated() {
+        org.assertj.core.api.Assertions
+            .assertThatIllegalArgumentException()
+            .isThrownBy(() -> new DashboardOptions(List.of(), Duration.ofSeconds(59), null));
+        org.assertj.core.api.Assertions
+            .assertThatIllegalArgumentException()
+            .isThrownBy(() -> new DashboardOptions(List.of(), Duration.ofMinutes(30), "javascript:alert({traceId})"));
+        org.assertj.core.api.Assertions
+            .assertThatIllegalArgumentException()
+            .isThrownBy(() -> new DashboardOptions(List.of(), Duration.ofMinutes(30), "https://tempo.example.com/"));
+    }
+
+    private DashboardPages pages(Instant now, KnowledgeCorpusCatalog... catalogs) {
+        return new DashboardPages(store, store, "shop", "USD", Clock.fixed(now, ZoneOffset.UTC),
+                new DashboardOptions(List.of(catalogs), Duration.ofMinutes(30), null));
+    }
+
+    private static KnowledgeCorpusCatalog catalog(String store, @Nullable Set<String> ids) {
+        return new KnowledgeCorpusCatalog() {
+            @Override
+            public String store() {
+                return store;
+            }
+
+            @Override
+            public @Nullable Set<String> documentIds() {
+                return ids;
+            }
+        };
+    }
+
+    @Test
     void conversation() {
         var page = pages().conversation("help", "h1");
 
@@ -167,7 +262,7 @@ class DashboardPagesTest {
     void configFlagsPerInstanceMemoryStore() {
         DashboardConfig config = pages().config();
 
-        assertThat(config).isEqualTo(new DashboardConfig("shop", List.of("crm", "help", "shop"), "USD", "memory", true));
+        assertThat(config).isEqualTo(new DashboardConfig("shop", List.of("crm", "help", "shop"), "USD", "memory", true, null));
     }
 
     @Test

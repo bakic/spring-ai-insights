@@ -6,19 +6,25 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 
 import io.github.springaiinsights.analytics.Granularity;
 import io.github.springaiinsights.analytics.InsightsAnalytics;
 import io.github.springaiinsights.analytics.InsightsFilter;
 import io.github.springaiinsights.analytics.TimeBucket;
+import io.github.springaiinsights.analytics.ToolUsage;
 import io.github.springaiinsights.analytics.UsageSummary;
 import io.github.springaiinsights.feedback.Rating;
+import io.github.springaiinsights.knowledge.KnowledgeCorpusCatalog;
 import io.github.springaiinsights.store.InMemoryEventStore;
 import io.github.springaiinsights.store.InsightsEventStore;
 import io.github.springaiinsights.store.TurnQuery;
 import io.github.springaiinsights.web.pages.ConversationPage;
+import io.github.springaiinsights.web.pages.CorpusCoverage;
 import io.github.springaiinsights.web.pages.CostPage;
 import io.github.springaiinsights.web.pages.DashboardConfig;
 import io.github.springaiinsights.web.pages.KnowledgePage;
@@ -40,7 +46,13 @@ public final class DashboardPages {
 
     static final int TOP_DOCUMENTS = 20;
 
+    static final int LEAST_DOCUMENTS = 20;
+
     static final int RECENT_NEGATIVE = 20;
+
+    static final int RECENT_ABANDONED = 20;
+
+    static final int NEVER_RETRIEVED_SAMPLE = 50;
 
     private static final int MONEY_SCALE = 6;
 
@@ -56,8 +68,16 @@ public final class DashboardPages {
 
     private final Clock clock;
 
+    private final DashboardOptions options;
+
     public DashboardPages(InsightsAnalytics analytics, InsightsEventStore store, String application, String currency,
             Clock clock) {
+        this(analytics, store, application, currency, clock, DashboardOptions.DEFAULTS);
+    }
+
+    public DashboardPages(InsightsAnalytics analytics, InsightsEventStore store, String application, String currency,
+            Clock clock, DashboardOptions options) {
+        this.options = options;
         this.analytics = analytics;
         this.store = store;
         this.application = application;
@@ -71,7 +91,7 @@ public final class DashboardPages {
 
     public DashboardConfig config() {
         return new DashboardConfig(application, analytics.applications(), currency, storeName(store),
-                store instanceof InMemoryEventStore);
+                store instanceof InMemoryEventStore, options.traceUrl());
     }
 
     public OverviewPage overview(InsightsFilter filter) {
@@ -130,21 +150,50 @@ public final class DashboardPages {
     public KnowledgePage knowledge(InsightsFilter filter) {
         UsageSummary summary = analytics.summary(filter);
         return new KnowledgePage(summary.turns(), summary.retrievalTurns(), summary.retrievals(),
-                summary.emptyRetrievals(), analytics.retrievals(filter), analytics.documents(filter, TOP_DOCUMENTS));
+                summary.emptyRetrievals(), analytics.retrievals(filter), analytics.documents(filter, TOP_DOCUMENTS),
+                analytics.leastDocuments(filter, LEAST_DOCUMENTS), coverage(filter));
     }
 
     public ToolsPage tools(InsightsFilter filter) {
-        return new ToolsPage(analytics.tools(filter));
+        List<ToolUsage> tools = analytics.tools(filter);
+        List<String> offered = analytics.offeredTools(filter);
+        Set<String> neverCalled = new TreeSet<>(offered);
+        tools.forEach(tool -> neverCalled.remove(tool.tool()));
+        return new ToolsPage(tools, List.copyOf(neverCalled), !offered.isEmpty());
     }
 
     public QualityPage quality(InsightsFilter filter) {
+        Instant idle = clock.instant().minus(options.abandonedAfter());
+        Instant idleBefore = idle.isBefore(filter.to()) ? idle : filter.to();
         return new QualityPage(analytics.summary(filter), analytics.quality(filter),
-                analytics.recentFeedback(filter, Rating.DOWN, RECENT_NEGATIVE));
+                analytics.recentFeedback(filter, Rating.DOWN, RECENT_NEGATIVE),
+                analytics.abandonedConversations(filter, idleBefore, RECENT_ABANDONED));
     }
 
     public ConversationPage conversation(String application, String conversationId) {
         return new ConversationPage(analytics.conversation(application, conversationId),
                 analytics.conversationFeedback(application, conversationId));
+    }
+
+    private List<CorpusCoverage> coverage(InsightsFilter filter) {
+        List<CorpusCoverage> coverage = new ArrayList<>();
+        for (KnowledgeCorpusCatalog catalog : options.catalogs()) {
+            Set<String> documents = catalog.documentIds();
+            if (documents == null) {
+                coverage.add(new CorpusCoverage(catalog.store(), null, 0, List.of()));
+                continue;
+            }
+            Set<String> retrieved = analytics.retrievedDocumentIds(filter, catalog.store());
+            TreeSet<String> never = new TreeSet<>();
+            for (String document : documents) {
+                if (!retrieved.contains(document)) {
+                    never.add(document);
+                }
+            }
+            coverage.add(new CorpusCoverage(catalog.store(), documents.size(), never.size(),
+                    never.stream().limit(NEVER_RETRIEVED_SAMPLE).toList()));
+        }
+        return coverage;
     }
 
     private long activeUsers(InsightsFilter filter, int days) {

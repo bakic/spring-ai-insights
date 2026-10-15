@@ -6,11 +6,13 @@ import java.util.List;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
+import io.micrometer.tracing.Tracer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import io.github.springaiinsights.capture.InsightsAdvisor;
 import io.github.springaiinsights.capture.InsightsObservationHandler;
+import io.github.springaiinsights.capture.TraceIdSupplier;
 import io.github.springaiinsights.capture.TurnTimeouts;
 import io.github.springaiinsights.identity.InsightsIdentityResolver;
 import io.github.springaiinsights.identity.Pseudonymiser;
@@ -24,6 +26,7 @@ import io.github.springaiinsights.store.InsightsEventStore;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientBuilderCustomizer;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
@@ -108,9 +111,17 @@ public class InsightsAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnClass(VectorStore.class)
+    @ConditionalOnBooleanProperty(name = "ai-insights.knowledge.observe-stores", matchIfMissing = true)
+    static ObservingVectorStorePostProcessor insightsObservingVectorStorePostProcessor(
+            ObjectProvider<ObservationRegistry> observationRegistry) {
+        return new ObservingVectorStorePostProcessor(observationRegistry);
+    }
+
+    @Bean
     @ConditionalOnMissingBean
-    InsightsObservationHandler insightsObservationHandler(InsightsMetrics metrics) {
-        return new InsightsObservationHandler(metrics);
+    InsightsObservationHandler insightsObservationHandler(InsightsMetrics metrics, InsightsProperties properties) {
+        return new InsightsObservationHandler(metrics, properties.getKnowledge().getDocumentKey());
     }
 
     @Bean(destroyMethod = "close")
@@ -124,10 +135,16 @@ public class InsightsAutoConfiguration {
     InsightsAdvisor insightsAdvisor(ObjectProvider<ObservationRegistry> observationRegistry,
             InsightsIdentityResolver identityResolver, ObjectProvider<Pseudonymiser> pseudonymiser,
             CostCalculator costs, AsyncEventWriter writer, InsightsMetrics metrics, TurnTimeouts timeouts,
-            InsightsProperties properties, Environment environment) {
+            TraceIdSupplier traceIds, InsightsProperties properties, Environment environment) {
         return new InsightsAdvisor(observationRegistry.getIfUnique(() -> ObservationRegistry.NOOP), identityResolver,
                 pseudonymiser.getIfAvailable(), costs, writer, metrics, application(properties, environment),
-                properties.isCaptureContent(), timeouts);
+                properties.isCaptureContent(), timeouts, traceIds);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    TraceIdSupplier insightsTraceIdSupplier() {
+        return TraceIdSupplier.NONE;
     }
 
     @Bean
@@ -151,6 +168,18 @@ public class InsightsAutoConfiguration {
         }
         return new ModelPrice(price.getModel(), price.getInput(), price.getOutput(), price.getCacheRead(),
                 price.getCacheWrite(), price.isInputIncludesCached());
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "io.micrometer.tracing.Tracer")
+    static class TracingConfiguration {
+
+        @Bean
+        @ConditionalOnMissingBean
+        TraceIdSupplier insightsTraceIdSupplier(ObjectProvider<Tracer> tracer) {
+            Tracer unique = tracer.getIfUnique();
+            return unique == null ? TraceIdSupplier.NONE : new MicrometerTraceIdSupplier(unique);
+        }
     }
 
     @Configuration(proxyBeanMethods = false)

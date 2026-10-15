@@ -49,6 +49,10 @@ public class InsightsProperties {
 
     private final Feedback feedback = new Feedback();
 
+    private final Knowledge knowledge = new Knowledge();
+
+    private final Quality quality = new Quality();
+
     public boolean isEnabled() {
         return enabled;
     }
@@ -123,6 +127,14 @@ public class InsightsProperties {
 
     public Feedback getFeedback() {
         return feedback;
+    }
+
+    public Knowledge getKnowledge() {
+        return knowledge;
+    }
+
+    public Quality getQuality() {
+        return quality;
     }
 
     public enum StoreType {
@@ -341,6 +353,8 @@ public class InsightsProperties {
 
         private static final Pattern PATH = Pattern.compile("^(/[A-Za-z0-9._~-]+)+$");
 
+        private static final Pattern TRACE_URL = Pattern.compile("^https?://[^\\s\"'<>]+$");
+
         /** Whether the built-in dashboard and its JSON API are served. */
         private boolean enabled = true;
 
@@ -352,6 +366,12 @@ public class InsightsProperties {
 
         /** Serve the dashboard without Spring Security. Only for local development. */
         private boolean allowAnonymous = false;
+
+        /**
+         * Link from a turn to its trace in your tracing UI (Grafana Tempo, Jaeger, Zipkin...): an http(s) URL with a
+         * {traceId} placeholder. No link when unset.
+         */
+        private @Nullable String traceUrl;
 
         public boolean isEnabled() {
             return enabled;
@@ -387,6 +407,37 @@ public class InsightsProperties {
         public void setAllowAnonymous(boolean allowAnonymous) {
             this.allowAnonymous = allowAnonymous;
         }
+
+        public @Nullable String getTraceUrl() {
+            return traceUrl;
+        }
+
+        public void setTraceUrl(@Nullable String traceUrl) {
+            if (traceUrl != null && !traceUrl.isBlank()
+                    && (!TRACE_URL.matcher(traceUrl).matches() || !traceUrl.contains("{traceId}"))) {
+                throw new IllegalArgumentException(
+                        "ai-insights.dashboard.trace-url must be an http(s) URL containing {traceId}");
+            }
+            this.traceUrl = traceUrl == null || traceUrl.isBlank() ? null : traceUrl;
+        }
+    }
+
+    public static class Quality {
+
+        /** How long a conversation must be idle before it counts as abandoned (at least 1 minute). */
+        private Duration abandonedAfter = Duration.ofMinutes(30);
+
+        public Duration getAbandonedAfter() {
+            return abandonedAfter;
+        }
+
+        public void setAbandonedAfter(Duration abandonedAfter) {
+            if (abandonedAfter.compareTo(Duration.ofMinutes(1)) < 0) {
+                throw new IllegalArgumentException(
+                        "ai-insights.quality.abandoned-after must be at least 1 minute: " + abandonedAfter);
+            }
+            this.abandonedAfter = abandonedAfter;
+        }
     }
 
     public static class Feedback {
@@ -400,6 +451,80 @@ public class InsightsProperties {
 
         public void setEnabled(boolean enabled) {
             this.enabled = enabled;
+        }
+    }
+
+    public static class Knowledge {
+
+        /**
+         * Metadata key whose value identifies a retrieved document, so chunks of one source count as one document.
+         * Empty to use the vector store's document IDs.
+         */
+        private String documentKey = "source";
+
+        /**
+         * Whether VectorStore beans that emit no observations (e.g. the Bedrock Knowledge Base store) are wrapped so
+         * their queries are recorded. Wrapped stores must be injected as VectorStore.
+         */
+        private boolean observeStores = true;
+
+        private final Bedrock bedrock = new Bedrock();
+
+        public Bedrock getBedrock() {
+            return bedrock;
+        }
+
+        public String getDocumentKey() {
+            return documentKey;
+        }
+
+        public void setDocumentKey(String documentKey) {
+            this.documentKey = documentKey;
+        }
+
+        public boolean isObserveStores() {
+            return observeStores;
+        }
+
+        public void setObserveStores(boolean observeStores) {
+            this.observeStores = observeStores;
+        }
+
+        /** Lists the documents of Amazon Bedrock Knowledge Bases, to show those never retrieved. */
+        public static class Bedrock {
+
+            /** IDs of the knowledge bases to list; listing is off when empty. */
+            private List<String> knowledgeBaseIds = new ArrayList<>();
+
+            /** AWS region of the knowledge bases, when no BedrockAgentClient bean exists; else the SDK default. */
+            private @Nullable String region;
+
+            /** How often the document list is refreshed (at least 1 minute). */
+            private Duration refresh = Duration.ofHours(1);
+
+            public List<String> getKnowledgeBaseIds() {
+                return knowledgeBaseIds;
+            }
+
+            public void setKnowledgeBaseIds(List<String> knowledgeBaseIds) {
+                this.knowledgeBaseIds = knowledgeBaseIds;
+            }
+
+            public @Nullable String getRegion() {
+                return region;
+            }
+
+            public void setRegion(@Nullable String region) {
+                this.region = region;
+            }
+
+            public Duration getRefresh() {
+                return refresh;
+            }
+
+            public void setRefresh(Duration refresh) {
+                this.refresh = refresh;
+            }
         }
     }
 }

@@ -134,6 +134,42 @@ ChatClient chat = ChatClient.builder(chatModel, observationRegistry, null, null)
 `ChatClient.create(chatModel)` has no observation registry: turns are still recorded, but only with
 the token usage of the final response, provider `unknown`, and no tool or retrieval details.
 
+## Knowledge bases
+
+Every `similaritySearch` on a `VectorStore` is recorded as a retrieval: which store, how many chunks,
+and which documents. A document is identified by its `source` metadata (the file or S3 URI most
+loaders and Amazon Bedrock Knowledge Bases set), else by the chunk ID; several chunks of one document
+count as one hit. Change the key with `ai-insights.knowledge.document-key`.
+
+Stores that emit no observation themselves are observed too, and keep their type, so you can still
+inject them by their class. A `final` store class, such as `BedrockKnowledgeBaseVectorStore`, cannot be
+subclassed and is wrapped instead: inject it as `VectorStore`. Turn this off with
+`ai-insights.knowledge.observe-stores=false`.
+
+To also see documents that are **never** retrieved in an Amazon Bedrock Knowledge Base, add
+`spring-ai-insights-bedrock` (it brings the AWS SDK `bedrockagent` client) and list the knowledge bases:
+
+```kotlin
+implementation("io.github.springaiinsights:spring-ai-insights-bedrock:0.1.0-SNAPSHOT")
+```
+
+```yaml
+ai-insights:
+  knowledge:
+    bedrock:
+      knowledge-base-ids: KB12345678
+      region: eu-west-1   # optional, else spring.ai.bedrock.aws.region, else the AWS SDK default
+```
+
+The documents are listed at startup and every hour with the Bedrock Agent API
+(`bedrock:ListDataSources` and `bedrock:ListKnowledgeBaseDocuments`); a `BedrockAgentClient` bean is
+used when you define one. Missing credentials or region never fail startup: failures are logged, each
+knowledge base keeps its previous list, and listing is retried at the next refresh.
+
+For other stores, define a `KnowledgeCorpusCatalog` bean: its `store()` is the store name shown on
+the Knowledge base page, and `documentIds()` returns the IDs the `document-key` metadata takes
+(`null` while not loaded yet).
+
 ## Storage
 
 With Spring Data MongoDB configured in your app (`spring-boot-starter-data-mongodb`, MongoDB 5.0 or
@@ -177,9 +213,10 @@ Costs only add up priced model calls; `unpricedTurns` tells you how many turns a
 
 In a servlet web application, the starter serves a dashboard at **`/ai-insights/`**: overview, usage
 (daily/weekly/monthly active users, new users, busiest hours), cost (per model, tenant and user,
-month-end projection), knowledge base (searches, empty results, most returned documents), tools
-(most to least used, errors, repeated calls), quality (ratings, failures, latency, finish reasons)
-and a timeline of each conversation. Filter by application, period (24 h to 90 days) and tenant.
+month-end projection), knowledge base (searches, empty results, most and least returned documents,
+documents never returned), tools (most to least used, errors, p95 duration, repeated calls, tools
+offered but never called), quality (ratings, failures, latency, finish reasons, abandoned
+conversations) and a timeline of each conversation. Filter by application, period (24 h to 90 days) and tenant.
 
 ![Dashboard overview](docs/images/dashboard-overview.png)
 
@@ -215,6 +252,12 @@ Without Spring Security the dashboard is **off**, unless you set `ai-insights.da
   `Content-Security-Policy`. API responses are never cached.
 - **WebFlux** applications get no dashboard or feedback endpoint; use the `InsightsAnalytics` API
   and the `InsightsFeedback` bean directly.
+- **Abandoned conversations** are those whose last turn failed, was cancelled or was rated not
+  helpful, and that then stayed idle for `ai-insights.quality.abandoned-after` (30 minutes). A
+  conversation with a later turn, even outside the period, is not abandoned.
+- **Trace links.** With Micrometer Tracing, each turn records its trace ID. Set
+  `ai-insights.dashboard.trace-url` (for example `https://grafana.example.com/explore?traceId={traceId}`)
+  to link each turn of a conversation to its trace.
 - Try it with generated data: `./gradlew :spring-ai-insights-web:previewDashboard`, then open
   http://localhost:8089/ai-insights/.
 
@@ -284,6 +327,11 @@ Ratings appear on the Quality page, next to each turn of a conversation, and in 
 | `ai-insights.identity.pseudonymise` | `true` | HMAC-SHA256 user IDs |
 | `ai-insights.identity.secret` | – | HMAC key; required with a persistent store |
 | `ai-insights.identity.tenant-claim` | `tenant_id` | JWT claim holding the tenant |
+| `ai-insights.knowledge.document-key` | `source` | chunk metadata identifying the document; chunk ID when absent |
+| `ai-insights.knowledge.observe-stores` | `true` | wrap vector stores that emit no observation |
+| `ai-insights.knowledge.bedrock.knowledge-base-ids` | – | Bedrock Knowledge Bases whose documents are listed |
+| `ai-insights.knowledge.bedrock.region` | `spring.ai.bedrock.aws.region`, else SDK default | region of those knowledge bases |
+| `ai-insights.knowledge.bedrock.refresh` | `1h` | how often the document list is refreshed (≥ 1m) |
 | `ai-insights.pricing.currency` | `USD` | |
 | `ai-insights.pricing.models[]` | – | `model`, `input`, `output`, `cache-read`, `cache-write`, `input-includes-cached` |
 | `ai-insights.metrics.tenant-tag` | `false` | tag `ai.insights.cost` with tenant (only for a few tenants) |
@@ -293,6 +341,8 @@ Ratings appear on the Quality page, next to each turn of a conversation, and in 
 | `ai-insights.dashboard.path` | `/ai-insights` | dashboard URL; the feedback endpoint is `{path}/feedback` |
 | `ai-insights.dashboard.role` | `AI_INSIGHTS` | role required to open the dashboard |
 | `ai-insights.dashboard.allow-anonymous` | `false` | open the dashboard to anyone (local development only) |
+| `ai-insights.dashboard.trace-url` | – | link to a turn's trace: an http(s) URL containing `{traceId}` |
+| `ai-insights.quality.abandoned-after` | `30m` | idle time before a conversation can count as abandoned (≥ 1m) |
 | `ai-insights.feedback.enabled` | `true` | serve `POST {path}/feedback` |
 
 Every bean is `@ConditionalOnMissingBean`: replace the store (`InsightsEventStore`), the identity
@@ -306,9 +356,6 @@ resolver (`InsightsIdentityResolver`), or the pricing (`PriceCatalog`) with your
 
 ## Roadmap
 
-- **Plan 4: weekly report, knowledge-base insights, Grafana dashboards and release**, an email/Slack summary for managers, Bedrock Knowledge Base coverage, and the first Maven Central release. Also:
-  - tools that were never called and documents that were never retrieved (needs tool and document catalogs);
-  - tool latency p95;
-  - abandoned conversations;
-  - trace links from a conversation to its OpenTelemetry trace;
-  - a dashboard for WebFlux applications.
+- **Plan 4: weekly report, Grafana dashboards and release**: an email/Slack summary for managers,
+  Grafana dashboards and alert rules, a demo application, and the first Maven Central release.
+- A dashboard for WebFlux applications.

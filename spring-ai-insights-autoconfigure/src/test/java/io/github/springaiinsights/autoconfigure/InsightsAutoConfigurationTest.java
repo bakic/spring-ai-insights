@@ -5,12 +5,16 @@ import java.util.List;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.test.simple.SimpleTracer;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import io.github.springaiinsights.ScriptedChatModel;
 import io.github.springaiinsights.capture.InsightsAdvisor;
 import io.github.springaiinsights.capture.InsightsObservationHandler;
+import io.github.springaiinsights.capture.TraceIdSupplier;
+import io.github.springaiinsights.knowledge.ObservedVectorStore;
 import io.github.springaiinsights.capture.TurnTimeouts;
 import io.github.springaiinsights.analytics.InsightsAnalytics;
 import io.github.springaiinsights.mongodb.MongoEventStore;
@@ -30,8 +34,16 @@ import io.github.springaiinsights.store.InsightsEventStore;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientBuilderCustomizer;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.embedding.EmbeddingRequest;
+import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.ai.model.chat.client.autoconfigure.ChatClientAutoConfiguration;
 import org.springframework.ai.model.tool.autoconfigure.ToolCallingAutoConfiguration;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.SimpleVectorStore;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -65,6 +77,141 @@ class InsightsAutoConfigurationTest {
             assertThat(context.getBean(InsightsEventStore.class)).isInstanceOf(InMemoryEventStore.class);
             assertThat(context.getBean(PriceCatalog.class).currency()).isEqualTo("USD");
         });
+    }
+
+    @Test
+    void documentKeyDefaultsToSource() {
+        runner.run(context -> assertThat(context.getBean(InsightsObservationHandler.class).documentKey())
+            .isEqualTo("source"));
+    }
+
+    @Test
+    void documentKeyIsConfigurable() {
+        runner.withPropertyValues("ai-insights.knowledge.document-key=file_name")
+            .run(context -> assertThat(context.getBean(InsightsObservationHandler.class).documentKey())
+                .isEqualTo("file_name"));
+        runner.withPropertyValues("ai-insights.knowledge.document-key=")
+            .run(context -> assertThat(context.getBean(InsightsObservationHandler.class).documentKey()).isNull());
+    }
+
+    @Test
+    void plainStoreIsWrapped() {
+        runner.withBean("kb", VectorStore.class, PlainStore::new).run(context -> {
+            assertThat(context.getBean("kb")).isInstanceOf(ObservedVectorStore.class);
+            assertThat(((ObservedVectorStore) context.getBean("kb")).delegate()).isInstanceOf(PlainStore.class);
+        });
+    }
+
+    @Test
+    void alreadyObservedStoreIsNotWrapped() {
+        SimpleVectorStore simple = SimpleVectorStore.builder(new NoEmbedding()).build();
+        runner.withBean("simple", SimpleVectorStore.class, () -> simple)
+            .run(context -> assertThat(context.getBean("simple")).isSameAs(simple));
+    }
+
+    @Test
+    void wrappingCanBeDisabled() {
+        runner.withPropertyValues("ai-insights.knowledge.observe-stores=false")
+            .withBean("kb", VectorStore.class, PlainStore::new)
+            .run(context -> assertThat(context.getBean("kb")).isInstanceOf(PlainStore.class));
+    }
+
+    @Test
+    void storeInjectedByItsClassKeepsItsTypeAndIsObserved() {
+        List<String> observed = new java.util.concurrent.CopyOnWriteArrayList<>();
+        ObservationRegistry registry = ObservationRegistry.create();
+        registry.observationConfig().observationHandler(new io.micrometer.observation.ObservationHandler<>() {
+            @Override
+            public boolean supportsContext(io.micrometer.observation.Observation.Context context) {
+                return context instanceof org.springframework.ai.vectorstore.observation.VectorStoreObservationContext;
+            }
+
+            @Override
+            public void onStop(io.micrometer.observation.Observation.Context context) {
+                observed.add(((org.springframework.ai.vectorstore.observation.VectorStoreObservationContext) context)
+                    .getQueryRequest()
+                    .getQuery());
+            }
+        });
+        new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(InsightsAutoConfiguration.class))
+            .withBean(SimpleMeterRegistry.class)
+            .withBean(ObservationRegistry.class, () -> registry)
+            .withBean("kb", OpenStore.class, OpenStore::new)
+            .withBean(StoreUser.class)
+            .run(context -> {
+                assertThat(context).hasNotFailed();
+                OpenStore store = context.getBean(StoreUser.class).store;
+                assertThat(store.extra()).isEqualTo("extra");
+                store.similaritySearch(SearchRequest.builder().query("by request").build());
+                store.similaritySearch("by text");
+                assertThat(observed).containsExactly("by request", "by text");
+            });
+    }
+
+    static class OpenStore implements VectorStore {
+
+        String extra() {
+            return "extra";
+        }
+
+        @Override
+        public void add(List<Document> documents) {
+        }
+
+        @Override
+        public void delete(List<String> idList) {
+        }
+
+        @Override
+        public void delete(Filter.Expression filterExpression) {
+        }
+
+        @Override
+        public List<Document> similaritySearch(SearchRequest request) {
+            return List.of();
+        }
+    }
+
+    static class StoreUser {
+
+        final OpenStore store;
+
+        StoreUser(OpenStore store) {
+            this.store = store;
+        }
+    }
+
+    static final class PlainStore implements VectorStore {
+
+        @Override
+        public void add(List<Document> documents) {
+        }
+
+        @Override
+        public void delete(List<String> idList) {
+        }
+
+        @Override
+        public void delete(Filter.Expression filterExpression) {
+        }
+
+        @Override
+        public List<Document> similaritySearch(SearchRequest request) {
+            return List.of();
+        }
+    }
+
+    static final class NoEmbedding implements EmbeddingModel {
+
+        @Override
+        public EmbeddingResponse call(EmbeddingRequest request) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public float[] embed(Document document) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     @Test
@@ -248,6 +395,24 @@ class InsightsAutoConfigurationTest {
     void securityResolverChosenWhenSecurityPresent() {
         runner.run(context -> assertThat(context.getBean(InsightsIdentityResolver.class))
             .isInstanceOf(SpringSecurityIdentityResolver.class));
+    }
+
+    @Test
+    void tracerGivesMicrometerSupplier() {
+        runner.withBean(Tracer.class, SimpleTracer::new)
+            .run(context -> assertThat(context.getBean(TraceIdSupplier.class))
+                .isInstanceOf(MicrometerTraceIdSupplier.class));
+    }
+
+    @Test
+    void noTracerGivesNone() {
+        runner.run(context -> assertThat(context.getBean(TraceIdSupplier.class)).isSameAs(TraceIdSupplier.NONE));
+    }
+
+    @Test
+    void tracingAbsentFromClasspathGivesNone() {
+        runner.withClassLoader(new FilteredClassLoader(Tracer.class))
+            .run(context -> assertThat(context.getBean(TraceIdSupplier.class)).isSameAs(TraceIdSupplier.NONE));
     }
 
     @Test

@@ -2,6 +2,7 @@ package io.github.springaiinsights.mongodb;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
@@ -12,11 +13,16 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.ReplaceOptions;
 import com.mongodb.client.model.Sorts;
+import io.github.springaiinsights.analytics.AbandonReason;
+import io.github.springaiinsights.analytics.AbandonedConversation;
+import io.github.springaiinsights.analytics.AbandonedConversations;
 import io.github.springaiinsights.analytics.DocumentUsage;
 import io.github.springaiinsights.analytics.Granularity;
 import io.github.springaiinsights.analytics.InsightsAnalytics;
@@ -257,7 +263,27 @@ public final class MongoEventStore implements InsightsEventStore, FeedbackStore,
                 new Document("$group", perTool), new Document("$sort", new Document("calls", -1).append("_id", 1))))
             .stream()
             .map(d -> new ToolUsage(d.getString("_id"), number(d, "calls"), number(d, "errors"), number(d, "turns"),
-                    (double) number(d, "durationMs") / number(d, "calls"), number(d, "repeatedCalls")))
+                    (double) number(d, "durationMs") / number(d, "calls"),
+                    p95(filter, d.getString("_id"), number(d, "calls")), number(d, "repeatedCalls")))
+            .toList();
+    }
+
+    private long p95(InsightsFilter filter, String tool, long calls) {
+        List<Document> ranked = aggregate(List.of(match(filter),
+                new Document("$match", new Document("toolCalls.name", tool)), new Document("$unwind", "$toolCalls"),
+                new Document("$match", new Document("toolCalls.name", tool)),
+                new Document("$sort", new Document("toolCalls.durationMs", 1)),
+                new Document("$skip", ToolUsage.p95Index(calls)), new Document("$limit", 1),
+                new Document("$project", new Document("_id", 0).append("durationMs", "$toolCalls.durationMs"))));
+        return ranked.isEmpty() ? 0 : number(ranked.get(0), "durationMs");
+    }
+
+    @Override
+    public List<String> offeredTools(InsightsFilter filter) {
+        return aggregate(List.of(match(filter), new Document("$unwind", "$offeredTools"),
+                new Document("$group", new Document("_id", "$offeredTools")), new Document("$sort", new Document("_id", 1))))
+            .stream()
+            .map(d -> d.getString("_id"))
             .toList();
     }
 
@@ -366,6 +392,84 @@ public final class MongoEventStore implements InsightsEventStore, FeedbackStore,
                 return new DocumentUsage(id.getString("store"), id.getString("doc"), number(d, "hits"));
             })
             .toList();
+    }
+
+    @Override
+    public List<DocumentUsage> leastDocuments(InsightsFilter filter, int limit) {
+        if (limit < 1) {
+            return List.of();
+        }
+        return aggregate(List.of(match(filter), new Document("$unwind", "$retrievals"),
+                new Document("$unwind", "$retrievals.documentIds"),
+                new Document("$group", new Document("_id",
+                        new Document("store", "$retrievals.store").append("doc", "$retrievals.documentIds"))
+                    .append("hits", sum(1))),
+                new Document("$sort", new Document("hits", 1).append("_id.store", 1).append("_id.doc", 1)),
+                new Document("$limit", limit)))
+            .stream()
+            .map(d -> {
+                Document id = d.get("_id", Document.class);
+                return new DocumentUsage(id.getString("store"), id.getString("doc"), number(d, "hits"));
+            })
+            .toList();
+    }
+
+    @Override
+    public Set<String> retrievedDocumentIds(InsightsFilter filter, String store) {
+        return aggregate(List.of(match(filter), new Document("$unwind", "$retrievals"),
+                new Document("$match", new Document("retrievals.store", store)),
+                new Document("$unwind", "$retrievals.documentIds"),
+                new Document("$group", new Document("_id", "$retrievals.documentIds"))))
+            .stream()
+            .map(d -> d.getString("_id"))
+            .collect(Collectors.toUnmodifiableSet());
+    }
+
+    @Override
+    public AbandonedConversations abandonedConversations(InsightsFilter filter, Instant idleBefore, int limit) {
+        Instant cutoff = idleBefore.isBefore(filter.to()) ? idleBefore : filter.to();
+        Document since = new Document();
+        if (filter.application() != null) {
+            since.append("application", filter.application());
+        }
+        since.append("startedAt", new Document("$gte", Date.from(filter.from())));
+        if (filter.tenantId() != null) {
+            since.append("tenantId", filter.tenantId());
+        }
+        Document last = new Document("_id", new Document("application", "$application")
+            .append("conversationId", "$conversationId"))
+            .append("lastTurnId", new Document("$first", "$_id"))
+            .append("lastTurnAt", new Document("$first", "$startedAt"))
+            .append("userId", new Document("$first", "$userId"))
+            .append("outcome", new Document("$first", "$outcome"));
+        Document abandoned = new Document("$or", List.of(new Document("outcome", new Document("$in", List.of("ERROR",
+                "CANCELLED"))), new Document("feedback.rating", "DOWN")));
+        Document facets = new Document("count", List.of(new Document("$count", "n"))).append("recent",
+                List.of(new Document("$sort", new Document("lastTurnAt", -1).append("_id.conversationId", 1)),
+                        new Document("$limit", Math.max(1, limit))));
+        Document result = aggregate(List.of(new Document("$match", since),
+                new Document("$sort", new Document("application", 1).append("conversationId", 1)
+                    .append("startedAt", -1)
+                    .append("_id", -1)),
+                new Document("$group", last),
+                new Document("$match", new Document("lastTurnAt", new Document("$lt", Date.from(cutoff)))),
+                new Document("$lookup", new Document("from", feedbackCollectionName).append("localField", "lastTurnId")
+                    .append("foreignField", "_id")
+                    .append("as", "feedback")),
+                new Document("$match", abandoned), new Document("$facet", facets)))
+            .get(0);
+        List<Document> count = result.getList("count", Document.class);
+        List<AbandonedConversation> recent = limit < 1 ? List.of()
+                : result.getList("recent", Document.class).stream().map(MongoEventStore::abandoned).toList();
+        return new AbandonedConversations(count.isEmpty() ? 0 : number(count.get(0), "n"), recent);
+    }
+
+    private static AbandonedConversation abandoned(Document doc) {
+        String outcome = doc.getString("outcome");
+        AbandonReason reason = "ERROR".equals(outcome) ? AbandonReason.ERROR
+                : "CANCELLED".equals(outcome) ? AbandonReason.CANCELLED : AbandonReason.NEGATIVE_FEEDBACK;
+        return new AbandonedConversation(doc.get("_id", Document.class).getString("conversationId"),
+                doc.getString("userId"), doc.getString("lastTurnId"), doc.getDate("lastTurnAt").toInstant(), reason);
     }
 
     @Override

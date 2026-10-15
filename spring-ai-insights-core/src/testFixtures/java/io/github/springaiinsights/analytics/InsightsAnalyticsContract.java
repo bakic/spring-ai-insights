@@ -2,13 +2,17 @@ package io.github.springaiinsights.analytics;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 import java.util.stream.Stream;
 
 import io.github.springaiinsights.feedback.Feedback;
 import io.github.springaiinsights.feedback.FeedbackStore;
 import io.github.springaiinsights.feedback.Rating;
 import io.github.springaiinsights.model.ConversationTurn;
+import io.github.springaiinsights.model.ToolCallRecord;
+import io.github.springaiinsights.model.ToolOutcome;
 import io.github.springaiinsights.store.InsightsEventStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -233,6 +237,7 @@ public abstract class InsightsAnalyticsContract {
             assertThat(t.errors()).isZero();
             assertThat(t.turns()).isEqualTo(1);
             assertThat(t.avgDurationMs()).isCloseTo(40.0, within(1e-9));
+            assertThat(t.p95DurationMs()).isEqualTo(50);
             assertThat(t.repeatedCalls()).isEqualTo(1);
         });
         assertThat(tools.get(1)).satisfies(t -> {
@@ -240,8 +245,93 @@ public abstract class InsightsAnalyticsContract {
             assertThat(t.errors()).isEqualTo(1);
             assertThat(t.turns()).isEqualTo(1);
             assertThat(t.avgDurationMs()).isCloseTo(10.0, within(1e-9));
+            assertThat(t.p95DurationMs()).isEqualTo(10);
             assertThat(t.repeatedCalls()).isZero();
         });
+    }
+
+    @Test
+    void toolP95IsNearestRank() {
+        List<ToolCallRecord> calls = new ArrayList<>();
+        for (int duration = 20; duration >= 1; duration--) {
+            calls.add(new ToolCallRecord("t", duration, ToolOutcome.SUCCESS, null, 0));
+        }
+        store().save(ContractTurns.toolTurn("P1", "perf", "2026-10-01T10:00:00Z", "p1", calls));
+        assertThat(analytics().tools(new InsightsFilter("perf", FROM, TO, null, PARIS))).singleElement()
+            .satisfies(t -> assertThat(t.p95DurationMs()).isEqualTo(19));
+    }
+
+    @Test
+    void offeredToolsDistinctSorted() {
+        assertThat(analytics().offeredTools(SHOP)).containsExactly("lookup", "refund", "search");
+        assertThat(analytics().offeredTools(HELP)).isEmpty();
+    }
+
+    @Test
+    void leastDocumentsFewestFirst() {
+        assertThat(analytics().leastDocuments(HELP, 2)).containsExactly(new DocumentUsage("faq", "q1", 1),
+                new DocumentUsage("kb", "d2", 1));
+        assertThat(analytics().leastDocuments(HELP, 0)).isEmpty();
+    }
+
+    @Test
+    void retrievedDocumentIdsPerStore() {
+        assertThat(analytics().retrievedDocumentIds(HELP, "kb")).containsExactlyInAnyOrder("d1", "d2");
+        assertThat(analytics().retrievedDocumentIds(HELP, "faq")).containsExactly("q1");
+        assertThat(analytics().retrievedDocumentIds(HELP, "other")).isEmpty();
+    }
+
+    @Test
+    void abandonedConversations() {
+        AbandonedConversations help = analytics().abandonedConversations(HELP, TO, 2);
+        assertThat(help.count()).isEqualTo(3);
+        assertThat(help.recent()).containsExactly(
+                new AbandonedConversation("h3", null, "H4", Instant.parse("2026-10-02T12:00:00Z"), AbandonReason.ERROR),
+                new AbandonedConversation("h2", "v2", "H3", Instant.parse("2026-10-02T09:00:00Z"), AbandonReason.ERROR));
+        assertThat(analytics().abandonedConversations(HELP, TO, 10).recent()).last()
+            .isEqualTo(new AbandonedConversation("h1", "v1", "H2", Instant.parse("2026-10-01T11:00:00Z"),
+                    AbandonReason.NEGATIVE_FEEDBACK));
+        AbandonedConversations shop = analytics().abandonedConversations(SHOP, TO, 10);
+        assertThat(shop.count()).isEqualTo(2);
+        assertThat(shop.recent()).extracting(AbandonedConversation::conversationId, AbandonedConversation::reason)
+            .containsExactly(tuple("c3", AbandonReason.CANCELLED), tuple("c2", AbandonReason.ERROR));
+    }
+
+    @Test
+    void stillActiveIsNotAbandoned() {
+        AbandonedConversations help = analytics().abandonedConversations(HELP, Instant.parse("2026-10-02T11:00:00Z"), 10);
+        assertThat(help.count()).isEqualTo(2);
+        assertThat(help.recent()).extracting(AbandonedConversation::conversationId).containsExactly("h2", "h1");
+    }
+
+    @Test
+    void laterTurnOutsideRangeMeansNotAbandoned() {
+        store().save(ContractTurns.toolTurn("H6", "help", "2026-10-03T08:00:00Z", "h2", List.of()));
+        assertThat(analytics().abandonedConversations(HELP, TO, 10).recent())
+            .extracting(AbandonedConversation::conversationId)
+            .containsExactly("h3", "h1");
+    }
+
+    @Test
+    void abandonedRespectsTenant() {
+        AbandonedConversations globex = analytics()
+            .abandonedConversations(new InsightsFilter("help", FROM, TO, "globex", PARIS), TO, 10);
+        assertThat(globex.count()).isEqualTo(1);
+        assertThat(globex.recent()).extracting(AbandonedConversation::conversationId).containsExactly("h2");
+    }
+
+    @Test
+    void idleCutoffBeforeRangeGivesNothing() {
+        AbandonedConversations none = analytics().abandonedConversations(HELP, FROM, 10);
+        assertThat(none.count()).isZero();
+        assertThat(none.recent()).isEmpty();
+    }
+
+    @Test
+    void abandonedLimitZeroStillCounts() {
+        AbandonedConversations help = analytics().abandonedConversations(HELP, TO, 0);
+        assertThat(help.count()).isEqualTo(3);
+        assertThat(help.recent()).isEmpty();
     }
 
     @Test

@@ -5,12 +5,18 @@ import java.util.List;
 import io.github.springaiinsights.analytics.DocumentUsage;
 import io.github.springaiinsights.analytics.RetrievalUsage;
 
-/** How the knowledge base is used: turns that retrieved, per-store queries and the most returned documents. */
+/**
+ * How the knowledge base is used: turns that retrieved, per-store queries, the most and least returned documents,
+ * and, for catalogued stores, the documents never returned.
+ */
 public record KnowledgePage(long turns, long retrievalTurns, long retrievals, long emptyRetrievals,
-        List<RetrievalUsage> stores, List<DocumentUsage> topDocuments) {
+        List<RetrievalUsage> stores, List<DocumentUsage> topDocuments, List<DocumentUsage> leastDocuments,
+        List<CorpusCoverage> coverage) {
 
     public KnowledgePage {
         stores = List.copyOf(stores);
         topDocuments = List.copyOf(topDocuments);
+        leastDocuments = List.copyOf(leastDocuments);
+        coverage = List.copyOf(coverage);
     }
 }

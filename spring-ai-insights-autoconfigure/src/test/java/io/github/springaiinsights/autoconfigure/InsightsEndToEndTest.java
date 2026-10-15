@@ -41,7 +41,10 @@ import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.SimpleVectorStore;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.filter.Filter;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -91,6 +94,19 @@ class InsightsEndToEndTest {
         });
         assertThat(turn.modelCalls()).hasSize(2).extracting(ModelCall::provider).containsOnly("scripted");
         await().atMost(Duration.ofSeconds(5)).until(() -> count("ai.insights.turns") - turnsBefore == 1);
+    }
+
+    @Test
+    void unobservedKnowledgeBaseIsRecorded() {
+        ChatClientResponse response = builder.build().prompt().user("use kb").tools(tools).call().chatClientResponse();
+
+        ConversationTurn turn = recorded(response);
+        assertThat(turn.toolCalls()).extracting(ToolCallRecord::name).containsExactly("kb");
+        assertThat(turn.retrievals()).singleElement().satisfies(r -> {
+            assertThat(r.store()).isEqualTo("fake_knowledge_base");
+            assertThat(r.resultCount()).isEqualTo(2);
+            assertThat(r.documentIds()).containsExactly("s3://kb/refunds.pdf");
+        });
     }
 
     @Test
@@ -215,7 +231,7 @@ class InsightsEndToEndTest {
         String text = ScriptedChatModel.userText(prompt);
         if (text.startsWith("use ") && ScriptedChatModel.toolResponses(prompt) == 0) {
             String tool = text.substring(4);
-            return List.of(ScriptedChatModel.toolCall(tool, tool.equals("lookup") ? "{\"query\":\"refunds\"}" : "{}"));
+            return List.of(ScriptedChatModel.toolCall(tool, tool.equals("lookup") || tool.equals("kb") ? "{\"query\":\"refunds\"}" : "{}"));
         }
         return List.of(ScriptedChatModel.text("answer", 20, 10));
     }
@@ -224,8 +240,19 @@ class InsightsEndToEndTest {
 
         private final SimpleVectorStore vectorStore;
 
-        Tools(SimpleVectorStore vectorStore) {
+        private final VectorStore knowledgeBase;
+
+        Tools(SimpleVectorStore vectorStore, VectorStore knowledgeBase) {
             this.vectorStore = vectorStore;
+            this.knowledgeBase = knowledgeBase;
+        }
+
+        @Tool(description = "Searches the knowledge base")
+        public String kb(String query) {
+            return knowledgeBase.similaritySearch(SearchRequest.builder().query(query).topK(4).build())
+                .stream()
+                .map(Document::getText)
+                .collect(Collectors.joining("\n"));
         }
 
         @Tool(description = "Looks up the knowledge base")
@@ -244,6 +271,29 @@ class InsightsEndToEndTest {
         @Tool(description = "Tool b")
         public String b() {
             return "b";
+        }
+    }
+
+    /** Like the Bedrock Knowledge Base store: emits no observation, random IDs, the source in metadata. */
+    static final class FakeKnowledgeBase implements VectorStore {
+
+        @Override
+        public void add(List<Document> documents) {
+        }
+
+        @Override
+        public void delete(List<String> idList) {
+        }
+
+        @Override
+        public void delete(Filter.Expression filterExpression) {
+        }
+
+        @Override
+        public List<Document> similaritySearch(SearchRequest request) {
+            return List.of(
+                    Document.builder().text("refunds take 5 days").metadata("source", "s3://kb/refunds.pdf").score(0.9).build(),
+                    Document.builder().text("refunds need a receipt").metadata("source", "s3://kb/refunds.pdf").score(0.8).build());
         }
     }
 
@@ -311,8 +361,13 @@ class InsightsEndToEndTest {
         }
 
         @Bean
-        Tools tools(SimpleVectorStore vectorStore) {
-            return new Tools(vectorStore);
+        VectorStore knowledgeBase() {
+            return new FakeKnowledgeBase();
+        }
+
+        @Bean
+        Tools tools(SimpleVectorStore vectorStore, @Qualifier("knowledgeBase") VectorStore knowledgeBase) {
+            return new Tools(vectorStore, knowledgeBase);
         }
 
         @Bean

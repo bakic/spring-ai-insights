@@ -50,7 +50,11 @@ final class TurnDocuments {
             .append("currency", turn.currency())
             .append("attributes", turn.attributes().entrySet().stream()
                 .map(e -> new Document("key", e.getKey()).append("value", e.getValue()))
-                .toList());
+                .toList())
+            .append("offeredTools", turn.offeredTools());
+        if (turn.traceId() != null) {
+            doc.append("traceId", turn.traceId());
+        }
         if (turn.userMessage() != null) {
             doc.append("userMessage", turn.userMessage());
         }
@@ -73,7 +77,8 @@ final class TurnDocuments {
                 list(doc, "modelCalls").stream().map(TurnDocuments::modelCall).toList(),
                 list(doc, "toolCalls").stream().map(TurnDocuments::toolCall).toList(),
                 list(doc, "retrievals").stream().map(TurnDocuments::retrieval).toList(), bigDecimal(doc.get("totalCost")),
-                doc.getString("currency"), attributes, doc.getString("userMessage"), doc.getString("assistantMessage"));
+                doc.getString("currency"), attributes, doc.getString("userMessage"), doc.getString("assistantMessage"),
+                strings(doc, "offeredTools"), doc.getString("traceId"));
     }
 
     private static Document modelCall(ModelCall call) {

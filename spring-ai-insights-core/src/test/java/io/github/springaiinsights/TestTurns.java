@@ -50,6 +50,6 @@ public final class TestTurns {
     public ConversationTurn build() {
         return new ConversationTurn(turnId, application, conversationId, false, startedAt, userId, tenantId,
                 streaming, outcome, null, 1000, ttftMs, List.of("STOP"), modelCalls, toolCalls, retrievals,
-                totalCost, "USD", Map.of(), null, null);
+                totalCost, "USD", Map.of(), null, null, List.of(), null);
     }
 }

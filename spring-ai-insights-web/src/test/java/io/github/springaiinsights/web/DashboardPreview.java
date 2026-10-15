@@ -1,6 +1,7 @@
 package io.github.springaiinsights.web;
 
 import java.time.Clock;
+import java.time.Duration;
 
 import io.github.springaiinsights.store.InMemoryEventStore;
 
@@ -32,7 +33,10 @@ public class DashboardPreview {
     RouterFunction<ServerResponse> previewDashboard(InMemoryEventStore store) {
         Clock clock = Clock.systemUTC();
         return DashboardRoutes.create("/ai-insights", "AI_INSIGHTS", true,
-                new DashboardPages(store, store, "support-assistant", "EUR", clock), clock);
+                new DashboardPages(store, store, "support-assistant", "EUR", clock,
+                        new DashboardOptions(PreviewData.catalogs(), Duration.ofMinutes(30),
+                                "https://grafana.example.com/explore?traceId={traceId}")),
+                clock);
     }
 
 }

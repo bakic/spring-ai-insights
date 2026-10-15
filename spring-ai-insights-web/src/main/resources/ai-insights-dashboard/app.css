@@ -176,6 +176,20 @@ select, input[type="search"] {
 
 .pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 0 2.5rem; }
 
+.coverage { margin-top: 1rem; }
+
+.coverage h3 { margin: 0 0 0.25rem; font-size: 0.95rem; font-weight: 600; }
+
+.coverage p { margin: 0 0 0.5rem; }
+
+.ids { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 0.35rem 0.5rem; }
+
+.ids li { padding: 0.1rem 0.5rem; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 3px; font-size: 0.85rem; word-break: break-all; }
+
+.trace { font-size: 0.8rem; color: var(--muted); }
+
+a.trace { color: inherit; }
+
 /* Charts */
 .figure { margin: 2rem 0 0; }
 
@@ -283,7 +297,7 @@ tbody tr:hover { background: #f3f5f2; }
 .feedback { margin-top: 0.6rem; font-size: 0.9rem; }
 
 @media (max-width: 760px) {
-  .shell { grid-template-columns: minmax(0, 1fr); }
+  .shell { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr; }
   .field.period { min-width: 0; }
   .segments label { padding: 0.4rem 0.55rem; }
   .rail { border-right: 0; border-bottom: 1px solid var(--line); padding: 0.75rem 1rem; }

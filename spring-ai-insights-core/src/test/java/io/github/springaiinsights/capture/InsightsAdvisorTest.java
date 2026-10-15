@@ -30,6 +30,7 @@ import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 
@@ -61,8 +62,10 @@ class InsightsAdvisorTest {
 
     private TurnTimeouts timeouts;
 
+    private TraceIdSupplier traceIds = TraceIdSupplier.NONE;
+
     InsightsAdvisorTest() {
-        registry.observationConfig().observationHandler(new InsightsObservationHandler(metrics));
+        registry.observationConfig().observationHandler(new InsightsObservationHandler(metrics, "source"));
     }
 
     @AfterEach
@@ -76,7 +79,7 @@ class InsightsAdvisorTest {
     private InsightsAdvisor advisor() {
         timeouts = new TurnTimeouts(stallTimeout);
         return new InsightsAdvisor(registry, resolver, pseudonymiser, TurnRecorderTest.costs(), writer, metrics, "app",
-                captureContent, timeouts);
+                captureContent, timeouts, traceIds);
     }
 
     private ChatClient client(ScriptedChatModel model) {
@@ -408,6 +411,95 @@ class InsightsAdvisorTest {
             assertThat(mc.provider()).isEqualTo("unknown");
             assertThat(mc.inputTokens()).isEqualTo(40);
         });
+    }
+
+    @Test
+    void recordsOfferedToolsAndTraceId() {
+        traceIds = current -> "abc123";
+        client(p -> List.of(text("answer", 1, 1))).prompt()
+            .user("hi")
+            .tools(tool("refund", in -> "ok"), tool("lookup", in -> "ok"))
+            .call()
+            .content();
+        var turn = awaitTurn();
+        assertThat(turn.offeredTools()).containsExactly("lookup", "refund");
+        assertThat(turn.traceId()).isEqualTo("abc123");
+    }
+
+    @Test
+    void streamRecordsOfferedToolsAndTraceId() {
+        traceIds = current -> "abc123";
+        client(p -> List.of(text("answer", 1, 1))).prompt()
+            .user("hi")
+            .tools(tool("refund", in -> "ok"), tool("lookup", in -> "ok"))
+            .stream()
+            .content()
+            .blockLast();
+        var turn = awaitTurn();
+        assertThat(turn.offeredTools()).containsExactly("lookup", "refund");
+        assertThat(turn.traceId()).isEqualTo("abc123");
+    }
+
+    @Test
+    void traceAndToolFailuresStillRecordTurn() {
+        traceIds = current -> {
+            throw new IllegalStateException("tracing bug");
+        };
+        ToolCallback broken = new ToolCallback() {
+            @Override
+            public ToolDefinition getToolDefinition() {
+                throw new IllegalStateException("definition bug");
+            }
+
+            @Override
+            public String call(String toolInput) {
+                return "ok";
+            }
+        };
+        // ChatClient validates tool definitions before advisors run, so pass the options to the advisor directly
+        var options = ToolCallingChatOptions.builder().toolCallbacks(tool("lookup", in -> "ok"), broken).build();
+        var request = ChatClientRequest.builder().prompt(new Prompt("hi", options)).build();
+        var response = advisor().adviseCall(request, new CallAdvisorChain() {
+            @Override
+            public ChatClientResponse nextCall(ChatClientRequest r) {
+                return ChatClientResponse.builder().chatResponse(text("answer", 1, 1)).build();
+            }
+
+            @Override
+            public List<CallAdvisor> getCallAdvisors() {
+                return List.of();
+            }
+
+            @Override
+            public CallAdvisorChain copy(CallAdvisor after) {
+                return this;
+            }
+        });
+        assertThat(response.chatResponse().getResult().getOutput().getText()).isEqualTo("answer");
+        var turn = awaitTurn();
+        assertThat(turn.traceId()).isNull();
+        assertThat(turn.offeredTools()).isEmpty();
+        assertThat(meters.get("ai.insights.internal.errors").counter().count()).isEqualTo(2);
+    }
+
+    @Test
+    void noToolsGivesEmptyList() {
+        client(p -> List.of(text("answer", 1, 1))).prompt().user("hi").call().content();
+        var turn = awaitTurn();
+        assertThat(turn.offeredTools()).isEmpty();
+        assertThat(turn.traceId()).isNull();
+    }
+
+    @Test
+    void nestedCallDoesNotChangeOfferedTools() {
+        var inner = client(p -> List.of(text("inner", 5, 5)));
+        var outer = client(p -> toolResponses(p) < 1 ? List.of(toolCall("ask", "{}")) : List.of(text("outer", 7, 7)));
+        outer.prompt()
+            .user("hi")
+            .tools(tool("ask", in -> inner.prompt().user("sub").tools(tool("deep", x -> "x")).call().content()))
+            .call()
+            .content();
+        assertThat(awaitTurn().offeredTools()).containsExactly("ask");
     }
 
     @Test
