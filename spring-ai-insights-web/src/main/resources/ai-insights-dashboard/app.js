@@ -493,7 +493,7 @@
     const failed = (u) => ratio(u.errorTurns, u.turns);
     const priced = now.turns - now.unpricedTurns;
     return [
-      el('h1', { class: 'sr-only', text: 'Overview' }),
+      pageHead('Overview', `What the assistant cost and how it was used ${PERIOD_TEXT[state.period]}.`),
       el('section', { class: 'statement sheet', 'aria-label': 'Statement for the period' },
         el('div', { class: 'due' },
           el('h2', { text: 'Cost this period' }),
@@ -506,8 +506,7 @@
           el('dl', { class: 'month' },
             costRow('This month so far', moneyHeadline(spend.monthToDate)),
             costRow('Estimated month end', spend.monthEndProjection === null ? 'after day one' : moneyHeadline(spend.monthEndProjection))),
-          state.config.perInstance ? el('p', { class: 'flag', text: 'Estimated from the in-memory store: this instance only, '
-            + 'since its last restart.' }) : null),
+),
         el('div', { class: 'reads' },
           el('p', { class: 'answer', text: answer(now) }),
           meterTable([
@@ -843,9 +842,6 @@
   function route(focus) {
     const hash = location.hash.replace(/^#/, '') || 'overview';
     const [name, ...rest] = hash.split('/');
-    // The overview carries the in-memory notice inside its statement.
-    const onOverview = name === 'overview' || (!PAGES[name] && name !== 'conversation');
-    document.getElementById('banner').hidden = !state.config.perInstance || onOverview;
     document.getElementById('f-zone').textContent = rangeText(filterParams());
     for (const link of document.querySelectorAll('.rail a')) {
       if (link.dataset.page === name) {
@@ -858,22 +854,28 @@
       ? () => conversation(decodeURIComponent(rest[0] || ''), decodeURIComponent(rest[1] || ''))
       : PAGES[name] || overview;
     const token = ++renderToken;
-    clear(page);
-    page.append(el('p', { class: 'loading', text: 'Loading…' }));
+    // Keep the current page in place, dimmed, until the next one is ready: nothing collapses or jumps.
+    page.setAttribute('aria-busy', 'true');
+    if (!page.firstChild) {
+      page.append(el('p', { class: 'loading', text: 'Loading…' }));
+    }
     Promise.resolve()
       .then(render)
       .then((nodes) => {
         if (token === renderToken) {
           clear(page);
           append(page, [nodes]);
+          page.removeAttribute('aria-busy');
           if (focus) {
-            page.focus();
+            window.scrollTo(0, 0);
+            page.focus({ preventScroll: true });
           }
         }
       })
       .catch((error) => {
         if (token === renderToken) {
           clear(page);
+          page.removeAttribute('aria-busy');
           page.append(errorBox(error.message));
         }
       });
@@ -920,6 +922,7 @@
     }
     state.app = state.config.application;
     setCurrency(state.config.currency);
+    document.getElementById('banner').hidden = !state.config.perInstance;
     setupFilters(state.config);
     window.addEventListener('hashchange', () => route(true));
     route(false);

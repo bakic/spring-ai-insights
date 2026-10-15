@@ -42,9 +42,11 @@
           <span>Tenant</span>
           <input id="f-tenant" type="search" placeholder="All tenants" maxlength="200" autocomplete="off">
         </label>
-        <p class="zone" id="f-zone"></p>
+        <div class="meta">
+          <p class="banner" id="banner" hidden title="The in-memory store keeps the events of this instance only, since its last restart.">In-memory: this instance since restart</p>
+          <p class="zone" id="f-zone"></p>
+        </div>
       </form>
-      <p class="banner" id="banner" hidden>In-memory store: this page shows this instance only, since its last restart.</p>
       <main id="page" tabindex="-1" aria-live="polite"></main>
     </div>
   </div>
