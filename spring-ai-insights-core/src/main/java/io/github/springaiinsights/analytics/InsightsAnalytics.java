@@ -1,6 +1,8 @@
 package io.github.springaiinsights.analytics;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 
 import io.github.springaiinsights.feedback.Feedback;
 import io.github.springaiinsights.feedback.Rating;
@@ -50,6 +52,25 @@ public interface InsightsAnalytics {
 
     /** Documents returned most often first, then by store and document ID; at most {@code limit}. */
     List<DocumentUsage> documents(InsightsFilter filter, int limit);
+
+    /**
+     * Documents returned least often first, then by store and document ID; at most {@code limit}. Only documents
+     * returned at least once are known: compare {@link #retrievedDocumentIds} with the corpus for those never returned.
+     */
+    List<DocumentUsage> leastDocuments(InsightsFilter filter, int limit);
+
+    /** IDs of the documents a store returned on the selected turns. */
+    Set<String> retrievedDocumentIds(InsightsFilter filter, String store);
+
+    /**
+     * Conversations whose last turn failed, was cancelled, or was rated down. The last turn is taken over the turns of
+     * the filter's application and tenant started from {@code filter.from()} on, with no upper bound, so a
+     * conversation resumed after the range is not abandoned. That turn must start before both {@code filter.to()} and
+     * {@code idleBefore}, so conversations still active are left out. An ERROR or CANCELLED turn is reported as such;
+     * otherwise DOWN feedback on it gives NEGATIVE_FEEDBACK. {@code recent} is newest last turn first, then by
+     * conversation ID, at most {@code limit}.
+     */
+    AbandonedConversations abandonedConversations(InsightsFilter filter, Instant idleBefore, int limit);
 
     /** Feedback counts by creation time, finish reasons and error types of the selected turns. */
     QualitySummary quality(InsightsFilter filter);

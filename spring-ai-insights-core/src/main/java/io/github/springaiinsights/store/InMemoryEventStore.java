@@ -15,10 +15,14 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import io.github.springaiinsights.analytics.AbandonReason;
+import io.github.springaiinsights.analytics.AbandonedConversation;
+import io.github.springaiinsights.analytics.AbandonedConversations;
 import io.github.springaiinsights.analytics.DocumentUsage;
 import io.github.springaiinsights.analytics.Granularity;
 import io.github.springaiinsights.analytics.InsightsAnalytics;
@@ -286,6 +290,67 @@ public final class InMemoryEventStore implements InsightsEventStore, FeedbackSto
                 .thenComparing(DocumentUsage::documentId))
             .limit(limit)
             .toList();
+    }
+
+    @Override
+    public List<DocumentUsage> leastDocuments(InsightsFilter filter, int limit) {
+        Map<List<String>, Long> hits = select(filter).stream()
+            .flatMap(t -> t.retrievals().stream())
+            .flatMap(r -> r.documentIds().stream().map(d -> List.of(r.store(), d)))
+            .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+        return hits.entrySet().stream()
+            .map(e -> new DocumentUsage(e.getKey().get(0), e.getKey().get(1), e.getValue()))
+            .sorted(Comparator.comparingLong(DocumentUsage::hits)
+                .thenComparing(DocumentUsage::store)
+                .thenComparing(DocumentUsage::documentId))
+            .limit(Math.max(0, limit))
+            .toList();
+    }
+
+    @Override
+    public Set<String> retrievedDocumentIds(InsightsFilter filter, String store) {
+        return select(filter).stream()
+            .flatMap(t -> t.retrievals().stream())
+            .filter(r -> r.store().equals(store))
+            .flatMap(r -> r.documentIds().stream())
+            .collect(Collectors.toUnmodifiableSet());
+    }
+
+    @Override
+    public AbandonedConversations abandonedConversations(InsightsFilter filter, Instant idleBefore, int limit) {
+        Instant cutoff = idleBefore.isBefore(filter.to()) ? idleBefore : filter.to();
+        Comparator<ConversationTurn> latest = Comparator.comparing(ConversationTurn::startedAt)
+            .thenComparing(ConversationTurn::turnId);
+        Map<List<String>, ConversationTurn> last = turns.values().stream()
+            .filter(t -> filter.application() == null || filter.application().equals(t.application()))
+            .filter(t -> filter.tenantId() == null || filter.tenantId().equals(t.tenantId()))
+            .filter(t -> !t.startedAt().isBefore(filter.from()))
+            .collect(Collectors.toMap(t -> List.of(t.application(), t.conversationId()), Function.identity(),
+                    BinaryOperator.maxBy(latest)));
+        List<AbandonedConversation> abandoned = last.values().stream()
+            .filter(t -> t.startedAt().isBefore(cutoff))
+            .map(t -> {
+                AbandonReason reason = abandonReason(t);
+                return reason == null ? null
+                        : new AbandonedConversation(t.conversationId(), t.userId(), t.turnId(), t.startedAt(), reason);
+            })
+            .filter(Objects::nonNull)
+            .sorted(Comparator.comparing(AbandonedConversation::lastTurnAt)
+                .reversed()
+                .thenComparing(AbandonedConversation::conversationId))
+            .toList();
+        return new AbandonedConversations(abandoned.size(), abandoned.stream().limit(Math.max(0, limit)).toList());
+    }
+
+    private @Nullable AbandonReason abandonReason(ConversationTurn turn) {
+        if (turn.outcome() == TurnOutcome.ERROR) {
+            return AbandonReason.ERROR;
+        }
+        if (turn.outcome() == TurnOutcome.CANCELLED) {
+            return AbandonReason.CANCELLED;
+        }
+        Feedback rated = feedback.get(turn.turnId());
+        return rated != null && rated.rating() == Rating.DOWN ? AbandonReason.NEGATIVE_FEEDBACK : null;
     }
 
     @Override
