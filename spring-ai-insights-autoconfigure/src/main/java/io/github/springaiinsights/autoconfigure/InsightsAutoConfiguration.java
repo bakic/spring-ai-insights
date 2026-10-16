@@ -60,6 +60,10 @@ public class InsightsAutoConfiguration {
 
     private static final Log logger = LogFactory.getLog(InsightsAutoConfiguration.class);
 
+    public InsightsAutoConfiguration() {
+        SpringAiVersionCheck.warnIfAffected(SpringAiVersionCheck.installedVersion());
+    }
+
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBooleanProperty(name = "ai-insights.identity.pseudonymise", matchIfMissing = true)

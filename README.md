@@ -39,7 +39,9 @@ User and conversation IDs are **never** metric tags (unbounded cardinality); the
 
 ## Quickstart (5 minutes)
 
-Requirements: Java 21, Spring Boot 4.1, Spring AI 2.0.
+Requirements: Java 21, Spring Boot 4.1, Spring AI 2.0.1 or later. On Spring AI 2.0.0, tool calls and the
+knowledge base searches made inside tools are not linked to their turn, so they are missing; the starter logs a
+warning at startup when it finds 2.0.0.
 
 1. Add the starter. It is not on Maven Central yet; until the first release, clone this repository
    and use a Gradle composite build:
