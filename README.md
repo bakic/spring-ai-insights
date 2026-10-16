@@ -133,6 +133,9 @@ questions. Pricing for `gpt-4o` and `gpt-4o-mini` is already configured in `demo
 The demo's tests rely on the simulated model, so once it is gone build with
 `./gradlew build -x :spring-ai-insights-demo:test` (or delete `demo/src/test`).
 
+Building the project itself also needs Node.js 20 or later on the `PATH`: `./gradlew check` runs the dashboard's
+markdown renderer tests with `node --test`.
+
 ## Passing context
 
 ```java
