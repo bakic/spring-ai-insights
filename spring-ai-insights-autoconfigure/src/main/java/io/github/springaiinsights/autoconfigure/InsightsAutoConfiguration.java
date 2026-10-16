@@ -18,6 +18,7 @@ import io.github.springaiinsights.capture.TurnTimeouts;
 import io.github.springaiinsights.identity.InsightsIdentityResolver;
 import io.github.springaiinsights.identity.Pseudonymiser;
 import io.github.springaiinsights.metrics.InsightsMetrics;
+import io.github.springaiinsights.pricing.ConfiguredPriceCatalog;
 import io.github.springaiinsights.pricing.CostCalculator;
 import io.github.springaiinsights.pricing.ModelPrice;
 import io.github.springaiinsights.pricing.PriceCatalog;
@@ -82,9 +83,13 @@ public class InsightsAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     PriceCatalog insightsPriceCatalog(InsightsProperties properties) {
+        return configuredPriceCatalog(properties);
+    }
+
+    static ConfiguredPriceCatalog configuredPriceCatalog(InsightsProperties properties) {
         InsightsProperties.Pricing pricing = properties.getPricing();
         List<ModelPrice> prices = pricing.getModels().stream().map(InsightsAutoConfiguration::modelPrice).toList();
-        return new PriceCatalog(pricing.getCurrency(), prices);
+        return new ConfiguredPriceCatalog(pricing.getCurrency(), prices);
     }
 
     @Bean

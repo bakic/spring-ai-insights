@@ -11,9 +11,9 @@ import io.github.springaiinsights.model.ModelCall;
 import io.github.springaiinsights.model.ToolCallRecord;
 import io.github.springaiinsights.model.ToolOutcome;
 import io.github.springaiinsights.model.TurnOutcome;
+import io.github.springaiinsights.pricing.ConfiguredPriceCatalog;
 import io.github.springaiinsights.pricing.CostCalculator;
 import io.github.springaiinsights.pricing.ModelPrice;
-import io.github.springaiinsights.pricing.PriceCatalog;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
@@ -26,7 +26,7 @@ class TurnRecorderTest {
     private static final long MS = 1_000_000L;
 
     static CostCalculator costs() {
-        var catalog = new PriceCatalog("USD", List.of(new ModelPrice("m1", new BigDecimal("1"), new BigDecimal("2"),
+        var catalog = new ConfiguredPriceCatalog("USD", List.of(new ModelPrice("m1", new BigDecimal("1"), new BigDecimal("2"),
                 BigDecimal.ZERO, BigDecimal.ZERO, false)));
         return new CostCalculator(catalog, new InsightsMetrics(new SimpleMeterRegistry(), "app", false));
     }

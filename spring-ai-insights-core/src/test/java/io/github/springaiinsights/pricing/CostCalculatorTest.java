@@ -15,7 +15,7 @@ class CostCalculatorTest {
         return new BigDecimal(v);
     }
 
-    private final PriceCatalog catalog = new PriceCatalog("USD", List.of(
+    private final PriceCatalog catalog = new ConfiguredPriceCatalog("USD", List.of(
             new ModelPrice("anthropic.claude-sonnet-4", bd("3"), bd("15"), bd("0.3"), bd("3.75"), false),
             new ModelPrice("anthropic.claude", bd("1"), bd("1"), bd("0"), bd("0"), false),
             new ModelPrice("gpt-x", bd("2"), bd("8"), bd("0.5"), bd("0"), true)));
