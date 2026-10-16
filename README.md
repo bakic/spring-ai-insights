@@ -301,6 +301,9 @@ JwtAuthenticationConverter jwtAuthenticationConverter() {
 Without Spring Security the dashboard is **off**, unless you set `ai-insights.dashboard.allow-anonymous=true`
 (local development only: anyone who reaches the port sees the data).
 
+- Turn the dashboard off entirely with `ai-insights.dashboard.enabled=false` (for example in a prod
+  profile): the route is never registered, not just hidden. Capture, the analytics API and the
+  weekly report keep working; only the MVC dashboard and feedback endpoint disappear.
 - Change the URL with `ai-insights.dashboard.path` (for example `/ops/ai`); feedback moves with it.
 - With the in-memory store the dashboard shows **this instance only, since its last restart**, and
   says so in a banner. Use MongoDB to see every instance.
