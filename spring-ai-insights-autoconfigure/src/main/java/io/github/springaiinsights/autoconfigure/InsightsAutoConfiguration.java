@@ -10,6 +10,7 @@ import io.micrometer.tracing.Tracer;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
+import io.github.springaiinsights.capture.CallerIdentityCapture;
 import io.github.springaiinsights.capture.InsightsAdvisor;
 import io.github.springaiinsights.capture.InsightsObservationHandler;
 import io.github.springaiinsights.capture.TraceIdSupplier;
@@ -145,6 +146,13 @@ public class InsightsAutoConfiguration {
     @ConditionalOnMissingBean
     InsightsObservationHandler insightsObservationHandler(InsightsMetrics metrics, InsightsProperties properties) {
         return new InsightsObservationHandler(metrics, properties.getKnowledge().getDocumentKey());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    CallerIdentityCapture insightsCallerIdentityCapture(InsightsIdentityResolver identityResolver,
+            InsightsMetrics metrics) {
+        return new CallerIdentityCapture(identityResolver, metrics);
     }
 
     @Bean(destroyMethod = "close")

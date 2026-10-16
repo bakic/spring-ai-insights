@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,6 +32,9 @@ import io.github.springaiinsights.store.TurnQuery;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientResponse;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -229,6 +233,32 @@ class InsightsEndToEndTest {
         assertThat(turn.userId())
             .isEqualTo(new Pseudonymiser("k".getBytes(StandardCharsets.UTF_8)).pseudonymise("alice"))
             .isNotEqualTo("alice");
+    }
+
+    @Test
+    void streamedTurnSubscribedWithoutBlockingRecordsTheSecurityPrincipal() {
+        SecurityContextHolder.getContext()
+            .setAuthentication(UsernamePasswordAuthenticationToken.authenticated("alice", null, List.of()));
+        List<ChatClientResponse> chunks = new CopyOnWriteArrayList<>();
+
+        // Apps that stream to an SseEmitter subscribe instead of blocking, so Reactor captures no thread locals.
+        builder.build()
+            .prompt()
+            .user("use lookup")
+            .advisors(MessageChatMemoryAdvisor.builder(MessageWindowChatMemory.builder().build()).build())
+            .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, "c1"))
+            .tools(tools)
+            .stream()
+            .chatClientResponse()
+            .subscribe(chunks::add);
+
+        await().atMost(Duration.ofSeconds(10)).until(() -> !chunks.isEmpty());
+        String turnId = (String) chunks.get(0).context().get(InsightsContextKeys.TURN_ID);
+        ConversationTurn turn = await().atMost(Duration.ofSeconds(5))
+            .until(() -> store.findTurn(turnId), Optional::isPresent)
+            .orElseThrow();
+        assertThat(turn.userId())
+            .isEqualTo(new Pseudonymiser("k".getBytes(StandardCharsets.UTF_8)).pseudonymise("alice"));
     }
 
     @Test
