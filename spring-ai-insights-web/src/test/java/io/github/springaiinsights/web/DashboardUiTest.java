@@ -65,6 +65,10 @@ class DashboardUiTest {
         mvc.perform(get("/ops/ai/assets/app.css"))
             .andExpect(status().isOk())
             .andExpect(content().contentTypeCompatibleWith("text/css"));
+        mvc.perform(get("/ops/ai/assets/fonts/public-sans-latin.woff2"))
+            .andExpect(status().isOk())
+            .andExpect(content().contentTypeCompatibleWith("font/woff2"));
+        mvc.perform(get("/ops/ai/assets/fonts/OFL.txt")).andExpect(status().isOk());
         mvc.perform(get("/ops/ai/assets/missing.js")).andExpect(status().isNotFound());
     }
 

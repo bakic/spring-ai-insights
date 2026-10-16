@@ -174,6 +174,21 @@
     };
   }
 
+  /** The period of the same length that ends where this one starts. */
+  function previousParams(params) {
+    const from = new Date(params.from);
+    return { ...params, from: new Date(from.getTime() - PERIODS[state.period] * DAY_MS).toISOString(), to: params.from };
+  }
+
+  function rangeText(params) {
+    const format = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: state.zone });
+    const from = new Date(params.from);
+    const to = new Date(params.to);
+    const range = typeof format.formatRange === 'function' ? format.formatRange(from, to)
+      : `${format.format(from)} – ${format.format(to)}`;
+    return `${range} · ${state.zone}`;
+  }
+
   // ---- Building blocks ---------------------------------------------------------------------------
 
   function pageHead(title, description, back) {
@@ -213,7 +228,7 @@
     } else if (tone === 'up-is-bad') {
       cls = rising ? 'bad' : 'good';
     }
-    return { text: `${rising ? '▲' : '▼'} ${percent.format(Math.abs(change))} vs previous period`, cls };
+    return { text: `${rising ? 'up' : 'down'} ${percent.format(Math.abs(change))} on the previous period`, cls };
   }
 
   /** Change of a rate in percentage points; a rise is bad. */
@@ -226,7 +241,7 @@
       return { text: 'same as the previous period', cls: '' };
     }
     return {
-      text: `${points > 0 ? '▲' : '▼'} ${oneDecimal.format(Math.abs(points))} pts vs previous period`,
+      text: `${points > 0 ? 'up' : 'down'} ${oneDecimal.format(Math.abs(points))} pts on the previous period`,
       cls: points > 0 ? 'bad' : 'good'
     };
   }
@@ -245,7 +260,7 @@
     if (!rows || rows.length === 0) {
       return empty(emptyText);
     }
-    return el('div', { class: 'scroll' }, el('table', null,
+    return el('div', { class: 'scroll' }, el('table', { class: columns.length > 5 ? 'wide' : null },
       el('thead', null, el('tr', null, columns.map((c) => el('th', { class: c.num ? 'num' : null, scope: 'col', text: c.label })))),
       el('tbody', null, rows.map((row) => el('tr', null,
         columns.map((c) => el('td', { class: c.num ? 'num' : null }, c.cell(row))))))));
@@ -342,39 +357,185 @@
     { label: 'Conversation', cell: (t) => conversationLink(t.conversationId) }
   ];
 
+  function plural(n, one, many) {
+    return `${count(n)} ${n === 1 ? one : many}`;
+  }
+
+  /** Signed change for the meter table: words and signs only, the colour is reserved for failures. */
+  function change(current, previous) {
+    if (!previous) {
+      return current > 0 ? 'new' : '—';
+    }
+    const c = (current - previous) / previous;
+    if (Math.abs(c) < 0.0005) {
+      return 'same';
+    }
+    return `${c > 0 ? '+' : '−'}${percent.format(Math.abs(c))}`;
+  }
+
+  function pointsChange(now, before) {
+    if (!now.turns || !before.turns) {
+      return { text: '—', cls: '' };
+    }
+    const points = (ratio(now.errorTurns, now.turns) - ratio(before.errorTurns, before.turns)) * 100;
+    if (Math.abs(points) < 0.05) {
+      return { text: 'same', cls: '' };
+    }
+    return { text: `${points > 0 ? '+' : '−'}${oneDecimal.format(Math.abs(points))} pts`, cls: points > 0 ? 'bad' : 'good' };
+  }
+
+  function pairedBars(current, previous) {
+    const max = Math.max(current, previous);
+    const bars = el('span', { class: 'paired', 'aria-hidden': 'true' },
+      el('i', { class: 'now' }), el('i', { class: 'then' }));
+    bars.children[0].style.width = `${max > 0 ? Math.max(current > 0 ? 2 : 0, Math.round(100 * current / max)) : 0}%`;
+    bars.children[1].style.width = `${max > 0 ? Math.max(previous > 0 ? 2 : 0, Math.round(100 * previous / max)) : 0}%`;
+    return bars;
+  }
+
+  /** rows: { label, now, before, value(n) -> string, change: { text, cls } } */
+  function meterTable(rows) {
+    return el('table', { class: 'meter' },
+      el('caption', { class: 'sr-only', text: 'Readings for this period and the previous one' }),
+      el('thead', null, el('tr', null,
+        el('th', { scope: 'col', text: 'Reading' }),
+        el('th', { scope: 'col', class: 'num', text: 'This period' }),
+        el('th', { scope: 'col', class: 'num', text: 'Previous' }),
+        el('th', { scope: 'col', class: 'num', text: 'Change' }),
+        el('th', { scope: 'col', class: 'bars' }, el('span', { class: 'sr-only', text: 'Comparison' })))),
+      el('tbody', null, rows.map((row) => el('tr', null,
+        el('th', { scope: 'row', text: row.label }),
+        el('td', { class: 'num', text: row.value(row.now) }),
+        el('td', { class: 'num prev', text: row.value(row.before) }),
+        el('td', { class: `num change ${row.change.cls || ''}`, text: row.change.text }),
+        el('td', { class: 'bars' }, pairedBars(row.now, row.before))))));
+  }
+
+  function legend() {
+    return el('p', { class: 'legend' },
+      el('span', null, el('i', { class: 'now', 'aria-hidden': 'true' }), 'This period'),
+      el('span', null, el('i', { class: 'then', 'aria-hidden': 'true' }), 'Previous period'));
+  }
+
+  /** This period against the previous one, day by day, on one shared scale. */
+  function pairedChart(current, previous, options) {
+    const figure = el('figure', { class: 'figure sheet' }, el('figcaption', { text: options.label }), legend());
+    if (current.every((v) => v.value === 0) && previous.every((v) => v === 0)) {
+      figure.append(empty(options.emptyText));
+      return figure;
+    }
+    const width = 640;
+    const height = 190;
+    const top = 18;
+    const bottom = 24;
+    const plot = height - top - bottom;
+    const max = Math.max(...current.map((d) => d.value), ...previous);
+    const slot = width / current.length;
+    const pairWidth = Math.max(2, slot * 0.72);
+    const bar = pairWidth / 2;
+    const chart = svg('svg', { viewBox: `0 0 ${width} ${height}`, class: 'chart paired-chart', role: 'img', 'aria-label': options.label });
+    chart.append(svg('line', { class: 'grid', x1: 0, x2: width, y1: top, y2: top }));
+    chart.append(svg('text', { x: 0, y: top - 6, text: (options.axis || options.format)(max) }));
+    const every = Math.ceil(current.length / 12);
+    current.forEach((day, index) => {
+      const before = previous[index] || 0;
+      const x = index * slot + (slot - pairWidth) / 2;
+      const h = (v) => (v > 0 ? Math.max(1, plot * (v / max)) : 0);
+      chart.append(svg('rect', { class: 'now', x, y: top + plot - h(day.value), width: bar, height: h(day.value) },
+        svg('title', { text: `${day.label}: ${options.format(day.value)}` })));
+      chart.append(svg('rect', { class: 'then', x: x + bar, y: top + plot - h(before), width: bar, height: h(before) },
+        svg('title', { text: `Same day of the previous period: ${options.format(before)}` })));
+      if (index % every === 0) {
+        chart.append(svg('text', { x: x + pairWidth / 2, y: height - 6, 'text-anchor': 'middle', text: day.label }));
+      }
+    });
+    chart.append(svg('line', { class: 'axis', x1: 0, x2: width, y1: top + plot, y2: top + plot }));
+    figure.append(chart);
+    return figure;
+  }
+
+  /** The one plain-language answer the statement leads with, built from the readings only. */
+  function answer(now) {
+    if (now.turns === 0) {
+      return `Nobody used the assistant ${PERIOD_TEXT[state.period]}.`;
+    }
+    const conversations = plural(now.conversations, 'conversation', 'conversations');
+    let who;
+    if (now.activeUsers === 0) {
+      who = `The assistant held ${conversations} ${PERIOD_TEXT[state.period]}, all anonymous.`;
+    } else {
+      const anonymous = now.anonymousTurns ? `, plus ${plural(now.anonymousTurns, 'anonymous turn', 'anonymous turns')}` : '';
+      who = `${plural(now.activeUsers, 'signed-in user', 'signed-in users')} had ${conversations} with the assistant `
+        + `${PERIOD_TEXT[state.period]}${anonymous}.`;
+    }
+    const failures = now.errorTurns === 0 ? 'Every turn succeeded'
+      : `${count(now.errorTurns)} of ${plural(now.turns, 'turn', 'turns')} failed`;
+    const searches = now.retrievalTurns === 0 ? 'no turn searched the knowledge base'
+      : `${share(now.retrievalTurns, now.turns)} of turns searched the knowledge base`;
+    return `${who} ${failures}; ${searches}.`;
+  }
+
+  function costRow(label, value) {
+    return el('div', { class: 'row' }, el('dt', { text: label }), el('dd', { text: value }));
+  }
+
   // ---- Pages -------------------------------------------------------------------------------------
 
   async function overview() {
     const params = filterParams();
-    const data = await api('overview', params);
+    const [data, earlier, spend] = await Promise.all([
+      api('overview', params), api('overview', previousParams(params)), api('cost', params)]);
     const now = data.current;
     const before = data.previous;
     const days = dailySeries(data.days, params);
+    const previousDays = dailySeries(earlier.days, previousParams(params));
+    const tokens = (u) => u.inputTokens + u.outputTokens;
+    const failed = (u) => ratio(u.errorTurns, u.turns);
+    const priced = now.turns - now.unpricedTurns;
     return [
-      pageHead('Overview', `How the assistant was used ${PERIOD_TEXT[state.period]}, compared with the period before.`),
-      ledger([
-        { label: 'Turns', value: count(now.turns), delta: delta(now.turns, before.turns, 'neutral') },
-        { label: 'Conversations', value: count(now.conversations), delta: delta(now.conversations, before.conversations, 'neutral') },
-        { label: 'Active users', value: count(now.activeUsers), delta: delta(now.activeUsers, before.activeUsers, 'up-is-good') },
-        {
-          label: 'Cost', value: moneyHeadline(now.cost), delta: delta(Number(now.cost), Number(before.cost), 'neutral'),
-          hint: now.unpricedTurns ? `${count(now.unpricedTurns)} turns have no price` : null
-        },
-        {
-          label: 'Tokens', value: compactNumber.format(now.inputTokens + now.outputTokens),
-          hint: `${compactNumber.format(now.inputTokens)} in, ${compactNumber.format(now.outputTokens)} out`
-        },
-        {
-          label: 'Failed turns', value: share(now.errorTurns, now.turns),
-          delta: rateDelta(now.errorTurns, now.turns, before.errorTurns, before.turns), hint: `${count(now.errorTurns)} of ${count(now.turns)}`
-        }
-      ]),
-      el('div', { class: 'pair' },
-        barChart(days.map((d) => ({ label: d.label, value: d.turns })),
-          { label: 'Turns per day', format: count, emptyText: 'No turns in this period.' }),
-        barChart(days.map((d) => ({ label: d.label, value: d.cost })),
-          { label: 'Cost per day', format: money, axis: moneyAxis, tone: 'ochre', emptyText: 'No priced turns in this period.' })),
-      section('Recent turns', 'The 50 newest turns. Open a conversation to see every step of it.',
+      pageHead('Overview', `What the assistant cost and how it was used ${PERIOD_TEXT[state.period]}.`),
+      el('section', { class: 'statement sheet', 'aria-label': 'Statement for the period' },
+        el('div', { class: 'due' },
+          el('h2', { text: 'Cost this period' }),
+          el('p', { class: 'amount', text: moneyHeadline(now.cost) }),
+          el('p', { class: 'muted', text: priced > 0
+            ? `${plural(now.turns, 'turn', 'turns')} · ${moneyHeadline(Number(now.cost) / priced)} per priced turn`
+            : plural(now.turns, 'turn', 'turns') }),
+          now.unpricedTurns ? el('p', { class: 'warn', text: `${plural(now.unpricedTurns, 'turn has', 'turns have')} no price: `
+            + 'add their models under ai-insights.pricing.' }) : null,
+          el('dl', { class: 'month' },
+            costRow('This month so far', moneyHeadline(spend.monthToDate)),
+            costRow('Estimated month end', spend.monthEndProjection === null ? 'after day one' : moneyHeadline(spend.monthEndProjection))),
+),
+        el('div', { class: 'reads' },
+          el('p', { class: 'answer', text: answer(now) }),
+          meterTable([
+            { label: 'Turns', now: now.turns, before: before.turns, value: count, change: { text: change(now.turns, before.turns) } },
+            { label: 'Conversations', now: now.conversations, before: before.conversations, value: count,
+              change: { text: change(now.conversations, before.conversations) } },
+            { label: 'Signed-in users', now: now.activeUsers, before: before.activeUsers, value: count,
+              change: { text: change(now.activeUsers, before.activeUsers) } },
+            { label: 'Tokens', now: tokens(now), before: tokens(before), value: (n) => compactNumber.format(n),
+              change: { text: change(tokens(now), tokens(before)) } },
+            { label: 'Cost', now: Number(now.cost), before: Number(before.cost), value: moneyHeadline,
+              change: { text: change(Number(now.cost), Number(before.cost)) } },
+            { label: 'Failed turns', now: failed(now), before: failed(before),
+              value: (r) => percent.format(r), change: pointsChange(now, before) }
+          ]))),
+      el('div', { class: 'modules' },
+        pairedChart(days.map((d) => ({ label: d.label, value: d.turns })), previousDays.map((d) => d.turns),
+          { label: 'Turns per day', format: count, emptyText: 'No turns in this period or the one before.' }),
+        el('section', { class: 'sheet' },
+          el('h2', { text: 'Cost by model' }),
+          el('p', { class: 'note', text: 'Priced with your ai-insights.pricing catalog.' }),
+          table([
+            { label: 'Model', cell: (m) => m.model },
+            { label: 'Calls', num: true, cell: (m) => count(m.calls) },
+            { label: 'Cost', num: true, cell: (m) => (m.unpricedCalls === m.calls ? 'no price' : money(m.cost)) }
+          ], spend.models, 'No model calls in this period.'))),
+      el('section', { class: 'sheet' },
+        el('h2', { text: 'Recent turns' }),
+        el('p', { class: 'note', text: 'The 50 newest turns. Open a conversation to see every step of it.' }),
         table(TURN_COLUMNS, data.recentTurns,
           'No turns in this period. Turns appear here a few seconds after someone chats with the assistant.'))
     ];
@@ -682,6 +843,7 @@
     refreshTenants();
     const hash = location.hash.replace(/^#/, '') || 'overview';
     const [name, ...rest] = hash.split('/');
+    document.getElementById('f-zone').textContent = rangeText(filterParams());
     for (const link of document.querySelectorAll('.rail a')) {
       if (link.dataset.page === name) {
         link.setAttribute('aria-current', 'page');
@@ -693,22 +855,28 @@
       ? () => conversation(decodeURIComponent(rest[0] || ''), decodeURIComponent(rest[1] || ''))
       : PAGES[name] || overview;
     const token = ++renderToken;
-    clear(page);
-    page.append(el('p', { class: 'loading', text: 'Loading…' }));
+    // Keep the current page in place, dimmed, until the next one is ready: nothing collapses or jumps.
+    page.setAttribute('aria-busy', 'true');
+    if (!page.firstChild) {
+      page.append(el('p', { class: 'loading', text: 'Loading…' }));
+    }
     Promise.resolve()
       .then(render)
       .then((nodes) => {
         if (token === renderToken) {
           clear(page);
           append(page, [nodes]);
+          page.removeAttribute('aria-busy');
           if (focus) {
-            page.focus();
+            window.scrollTo(0, 0);
+            page.focus({ preventScroll: true });
           }
         }
       })
       .catch((error) => {
         if (token === renderToken) {
           clear(page);
+          page.removeAttribute('aria-busy');
           page.append(errorBox(error.message));
         }
       });
@@ -777,7 +945,11 @@
       }
     });
     document.getElementById('filters').addEventListener('submit', (event) => event.preventDefault());
-    document.getElementById('f-zone').textContent = `Times in ${state.zone}`;
+    const railApp = document.getElementById('rail-app');
+    railApp.textContent = state.app;
+    select.addEventListener('change', () => {
+      railApp.textContent = state.app;
+    });
   }
 
   async function start() {

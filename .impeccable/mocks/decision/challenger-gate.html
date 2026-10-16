@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Gate Board</title>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--ground:#f4f5f6;--ink:#121417;--slate:#2b3440;--alert:#ffb000;--fail:#c23a2b;--rule:#d8dce1}
+*{box-sizing:border-box}body{margin:0;width:1440px;height:900px;overflow:hidden;font-family:"Public Sans",sans-serif;background:var(--ground);color:var(--ink);font-variant-numeric:tabular-nums;display:grid;grid-template-columns:220px 1fr}
+.rail{background:var(--slate);color:#e4e8ee;padding:24px 14px;font-size:15px}.rail b{display:block;font-size:19px;color:#fff;margin:0 8px 26px}.rail div{padding:9px 10px;border-radius:6px}.rail .on{background:#fff;color:var(--ink);font-weight:700}
+main{padding:24px 34px}
+.pass{display:grid;grid-template-columns:repeat(6,1fr);background:#fff;border:1px solid var(--rule);border-radius:10px}
+.pass div{padding:16px 20px;border-left:2px dashed var(--rule)}.pass div:first-child{border:0}.pass small{display:block;font-size:12px;color:#5d6570}.pass b{font-size:36px;font-weight:800}
+h2{font-size:17px;margin:26px 0 10px}
+table{width:100%;border-collapse:collapse;background:var(--ink);color:#f2f2f2;border-radius:8px;overflow:hidden;font-size:16px}
+th{text-align:left;font-size:12px;color:#9aa3ad;font-weight:500;padding:10px 16px;border-bottom:1px solid #2c323a}td{padding:11px 16px;border-bottom:1px solid #22272e}
+.st{font-weight:700}.ok{color:#7fd39b}.chg{color:var(--alert)}.err{color:#ff7a6e}tr.lit td{background:#2a2410}
+</style></head><body>
+<nav class="rail"><b>AI Insights</b><div class="on">Board</div><div>Usage</div><div>Cost</div><div>Knowledge base</div><div>Tools</div><div>Quality</div></nav>
+<main>
+<div class="pass"><div><small>Turns</small><b>199</b></div><div><small>Conversations</small><b>66</b></div><div><small>Active users</small><b>12</b></div><div><small>Cost</small><b>$0.085</b></div><div><small>Tokens</small><b>50.2 k</b></div><div><small>Failed</small><b>0 %</b></div></div>
+<h2>Recent turns, newest first</h2>
+<table><thead><tr><th>Time</th><th>Conversation</th><th>User</th><th>Model</th><th>Latency</th><th>Tools</th><th>Searches</th><th>Status</th></tr></thead><tbody>
+<tr class="lit"><td>16:34</td><td>demo-0055</td><td>9e1ddc62</td><td>gpt-4o-mini</td><td>975 ms</td><td>1</td><td>2</td><td class="st chg">Slow</td></tr>
+<tr><td>16:34</td><td>demo-0058</td><td>1b58ce24</td><td>gpt-4o-mini</td><td>744 ms</td><td>1</td><td>2</td><td class="st ok">Answered</td></tr>
+<tr><td>16:33</td><td>demo-0066</td><td>a368a158</td><td>gpt-4o-mini</td><td>1.0 s</td><td>1</td><td>2</td><td class="st ok">Answered</td></tr>
+<tr><td>16:33</td><td>demo-0055</td><td>9e1ddc62</td><td>gpt-4o-mini</td><td>438 ms</td><td>1</td><td>2</td><td class="st ok">Answered</td></tr>
+<tr><td>16:32</td><td>demo-0061</td><td>4f02aa91</td><td>gpt-4o</td><td>612 ms</td><td>0</td><td>1</td><td class="st ok">Answered</td></tr>
+<tr><td>16:31</td><td>demo-0049</td><td>c7e9b001</td><td>gpt-4o-mini</td><td>1.3 s</td><td>2</td><td>2</td><td class="st err">Tool failed</td></tr>
+<tr><td>16:30</td><td>demo-0047</td><td>2a7710fe</td><td>gpt-4o-mini</td><td>519 ms</td><td>0</td><td>1</td><td class="st ok">Answered</td></tr>
+<tr><td>16:29</td><td>demo-0040</td><td>9e1ddc62</td><td>gpt-4o-mini</td><td>802 ms</td><td>1</td><td>2</td><td class="st ok">Answered</td></tr>
+<tr><td>16:28</td><td>demo-0038</td><td>a368a158</td><td>gpt-4o-mini</td><td>1.1 s</td><td>1</td><td>2</td><td class="st ok">Answered</td></tr>
+</tbody></table></main></body></html>

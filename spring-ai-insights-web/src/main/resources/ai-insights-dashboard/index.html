@@ -13,6 +13,7 @@
   <div class="shell">
     <nav class="rail" aria-label="Dashboard pages">
       <p class="brand">AI Insights</p>
+      <p class="app" id="rail-app"></p>
       <ul>
         <li><a href="#overview" data-page="overview">Overview</a></li>
         <li><a href="#usage" data-page="usage">Usage</a></li>
@@ -43,9 +44,11 @@
             list="f-tenant-list">
           <datalist id="f-tenant-list"></datalist>
         </label>
-        <p class="zone" id="f-zone"></p>
+        <div class="meta">
+          <p class="banner" id="banner" hidden title="The in-memory store keeps the events of this instance only, since its last restart.">In-memory: this instance since restart</p>
+          <p class="zone" id="f-zone"></p>
+        </div>
       </form>
-      <p class="banner" id="banner" hidden>In-memory store: this page shows this instance only, since its last restart.</p>
       <main id="page" tabindex="-1" aria-live="polite"></main>
     </div>
   </div>

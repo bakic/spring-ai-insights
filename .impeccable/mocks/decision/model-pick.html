@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Itemised Phone Bill</title>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--band:#6b2d7f;--ink:#26303b;--muted:#6a7380;--rule:#e1dde6;--tint:#ece6f1;--fail:#c23a2b}
+*{box-sizing:border-box}body{margin:0;width:1440px;height:900px;overflow:hidden;font-family:"Public Sans",sans-serif;color:var(--ink);background:#fff;font-variant-numeric:tabular-nums}
+header{background:var(--band);color:#fff;padding:18px 40px;display:flex;align-items:center;gap:40px}header b{font-size:20px;font-weight:800}header nav{display:flex;gap:24px;font-size:15px}header nav span.on{border-bottom:3px solid #fff;padding-bottom:4px}
+main{padding:26px 40px;display:grid;grid-template-columns:380px 1fr;gap:32px}
+.sum{background:var(--tint);border-radius:8px;padding:22px 24px}.sum h1{font-size:15px;margin:0;color:var(--muted);font-weight:600}.sum .tot{font-size:52px;font-weight:800;margin:8px 0 16px}
+.sum table{width:100%;border-collapse:collapse;font-size:15px}.sum td{padding:9px 0;border-top:1px solid #d5cce0}.sum td:last-child{text-align:right;font-weight:600}
+.list h2{font-size:17px;margin:0 0 12px}.day{background:var(--tint);font-weight:600;font-size:14px;padding:7px 12px}
+table.calls{width:100%;border-collapse:collapse;font-size:14px}.calls th{text-align:right;color:var(--muted);font-weight:500;padding:6px 12px;border-bottom:2px solid var(--ink)}.calls th:nth-child(-n+3){text-align:left}
+.calls td{padding:8px 12px;border-bottom:1px solid var(--rule);text-align:right}.calls td:nth-child(-n+3){text-align:left}.sub td{font-weight:700;border-bottom:2px solid var(--ink)}
+</style></head><body>
+<header><b>AI Insights</b><nav><span class="on">Statement</span><span>Usage</span><span>Cost</span><span>Knowledge base</span><span>Tools</span><span>Quality</span></nav></header>
+<main><section class="sum"><h1>Total for 8 – 15 Oct</h1><div class="tot">$0.085</div>
+<table><tr><td>Turns</td><td>199</td></tr><tr><td>Conversations</td><td>66</td></tr><tr><td>Active users</td><td>12</td></tr><tr><td>Tokens in / out</td><td>40.9 k / 9.3 k</td></tr><tr><td>Failed turns</td><td>0</td></tr><tr><td>Searches</td><td>398</td></tr><tr><td>Tool calls</td><td>211</td></tr></table></section>
+<section class="list"><h2>Itemised turns</h2>
+<table class="calls"><thead><tr><th>Time</th><th>User</th><th>Conversation</th><th>Duration</th><th>Tokens</th><th>Tools</th><th>Cost</th></tr></thead><tbody>
+<tr><td colspan="7" class="day">Wednesday 15 October</td></tr>
+<tr><td>16:34</td><td>9e1ddc62</td><td>demo-0055</td><td>975 ms</td><td>262</td><td>1</td><td>$0.000885</td></tr>
+<tr><td>16:34</td><td>1b58ce24</td><td>demo-0058</td><td>744 ms</td><td>301</td><td>1</td><td>$0.001153</td></tr>
+<tr><td>16:33</td><td>a368a158</td><td>demo-0066</td><td>1.0 s</td><td>301</td><td>1</td><td>$0.001153</td></tr>
+<tr><td>16:33</td><td>9e1ddc62</td><td>demo-0055</td><td>438 ms</td><td>262</td><td>1</td><td>$0.000885</td></tr>
+<tr><td>16:32</td><td>4f02aa91</td><td>demo-0061</td><td>612 ms</td><td>244</td><td>0</td><td>$0.000412</td></tr>
+<tr><td>16:31</td><td>c7e9b001</td><td>demo-0049</td><td>1.3 s</td><td>355</td><td>2</td><td>$0.001310</td></tr>
+<tr class="sub"><td colspan="6">Subtotal Wednesday 15 October</td><td>$0.0412</td></tr>
+<tr><td colspan="7" class="day">Tuesday 14 October</td></tr>
+<tr><td>18:02</td><td>9e1ddc62</td><td>demo-0040</td><td>802 ms</td><td>270</td><td>1</td><td>$0.000901</td></tr>
+<tr><td>17:58</td><td>2a7710fe</td><td>demo-0039</td><td>519 ms</td><td>198</td><td>0</td><td>$0.000377</td></tr>
+<tr><td>17:44</td><td>a368a158</td><td>demo-0038</td><td>1.1 s</td><td>310</td><td>1</td><td>$0.001162</td></tr>
+</tbody></table></section></main></body></html>
