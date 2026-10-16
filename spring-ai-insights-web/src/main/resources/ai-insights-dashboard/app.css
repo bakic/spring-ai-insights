@@ -524,7 +524,19 @@ tbody tr:hover { background: #fafafb; }
 
 .part h3 { display: flex; gap: 0.4rem; margin: 0 0 0.5rem; font-size: 0.9rem; font-weight: 600; }
 
-.model { margin: 0 0 0.4rem; font-family: var(--mono); font-size: 0.78rem; color: var(--muted); overflow-wrap: anywhere; }
+.model { margin: 0 0 0.4rem; overflow-wrap: anywhere; }
+
+.model-name { display: block; font-family: var(--mono); font-size: 0.78rem; font-weight: 600; color: var(--ink); }
+
+.model-full { display: block; font-family: var(--mono); font-size: 0.72rem; color: var(--muted); }
+
+.calls tbody th .model-name, .calls tbody th .model-full { font-weight: 500; }
+
+.cache-read, .cache-write { display: block; font-size: 0.72rem; }
+
+.cache-read::before { content: '\2193 '; color: var(--now); }
+
+.cache-write::before { content: '\2191 '; color: var(--muted); }
 
 table.calls { font-size: 0.85rem; }
 

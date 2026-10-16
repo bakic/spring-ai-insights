@@ -979,29 +979,47 @@
       el('h3', null, title, summary ? el('span', { class: 'muted', text: summary }) : null), content);
   }
 
+  /** A model's provider and full id/ARN, shown in full rather than hidden behind a hover title. */
+  function modelIdentity(provider, model) {
+    return el('p', { class: 'model' },
+      el('span', { class: 'model-name', text: modelName(model) }),
+      el('span', { class: 'model-full', text: `${provider}: ${model}` }));
+  }
+
   function modelCalls(calls) {
     if (calls.length === 0) {
       return null;
     }
+    const cached = calls.some((c) => c.cacheReadTokens > 0 || c.cacheWriteTokens > 0);
+    const cachedCell = (c) => el('td', { class: 'num' },
+      c.cacheReadTokens > 0 ? el('span', { class: 'cache-read', title: 'tokens read from cache', text: count(c.cacheReadTokens) }) : null,
+      c.cacheWriteTokens > 0 ? el('span', { class: 'cache-write', title: 'tokens written to cache', text: count(c.cacheWriteTokens) }) : null,
+      c.cacheReadTokens === 0 && c.cacheWriteTokens === 0 ? '—' : null);
     const total = calls.length > 1 ? el('tfoot', null, el('tr', null,
       el('th', { scope: 'row', text: 'Total' }),
       el('td', { class: 'num', text: count(sum(calls, (c) => c.inputTokens)) }),
       el('td', { class: 'num', text: count(sum(calls, (c) => c.outputTokens)) }),
+      cached ? cachedCell({
+        cacheReadTokens: sum(calls, (c) => c.cacheReadTokens),
+        cacheWriteTokens: sum(calls, (c) => c.cacheWriteTokens),
+      }) : null,
       el('td', { class: 'num', text: duration(sum(calls, (c) => c.durationMs)) }),
       el('td', { class: 'num', text: calls.every((c) => c.cost === null) ? '—' : money(sum(calls, (c) => c.cost)) }))) : null;
     const models = [...new Set(calls.map((c) => c.model))];
     return receiptPart('Model calls', ` ${count(calls.length)}`,
-      models.length === 1 ? el('p', { class: 'model', title: `${calls[0].provider}: ${models[0]}`, text: modelName(models[0]) }) : null,
+      models.length === 1 ? modelIdentity(calls[0].provider, models[0]) : null,
       el('table', { class: 'calls' },
         el('thead', null, el('tr', null,
           el('th', { text: '#' }), el('th', { class: 'num', text: 'In' }), el('th', { class: 'num', text: 'Out' }),
+          cached ? el('th', { class: 'num', text: 'Cached' }) : null,
           el('th', { class: 'num', text: 'Time' }), el('th', { class: 'num', text: 'Cost' }))),
         el('tbody', null, calls.map((c, k) => el('tr', { class: c.errorType ? 'failed' : null },
           el('th', { scope: 'row' }, String(k + 1),
-            models.length > 1 ? el('span', { class: 'model', title: `${c.provider}: ${c.model}`, text: modelName(c.model) }) : null,
+            models.length > 1 ? modelIdentity(c.provider, c.model) : null,
             c.errorType ? el('span', { class: 'fail-text', text: `failed: ${c.errorType}` }) : null),
           el('td', { class: 'num', text: count(c.inputTokens) }),
           el('td', { class: 'num', text: count(c.outputTokens) }),
+          cached ? cachedCell(c) : null,
           el('td', { class: 'num', text: duration(c.durationMs) }),
           el('td', { class: 'num', text: money(c.cost) })))),
         total));
