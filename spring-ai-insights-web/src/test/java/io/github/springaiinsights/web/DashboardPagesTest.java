@@ -14,6 +14,8 @@ import java.util.stream.IntStream;
 import io.github.springaiinsights.analytics.ContractTurns;
 import io.github.springaiinsights.analytics.AbandonedConversation;
 import io.github.springaiinsights.analytics.DocumentUsage;
+import io.github.springaiinsights.analytics.InsightsFilter;
+import io.github.springaiinsights.analytics.TenantUsage;
 import io.github.springaiinsights.feedback.Feedback;
 import io.github.springaiinsights.knowledge.KnowledgeCorpusCatalog;
 import io.github.springaiinsights.model.ConversationTurn;
@@ -26,6 +28,7 @@ import io.github.springaiinsights.web.pages.DashboardConfig;
 import io.github.springaiinsights.web.pages.KnowledgePage;
 import io.github.springaiinsights.web.pages.OverviewPage;
 import io.github.springaiinsights.web.pages.QualityPage;
+import io.github.springaiinsights.web.pages.TenantsPage;
 import io.github.springaiinsights.web.pages.TurnRow;
 import io.github.springaiinsights.web.pages.UsagePage;
 import org.jspecify.annotations.Nullable;
@@ -107,6 +110,41 @@ class DashboardPagesTest {
         assertThat(page.models()).isNotEmpty();
         assertThat(page.tenants()).isNotEmpty();
         assertThat(page.topUsers()).hasSize(3);
+    }
+
+    @Test
+    void tenantsListsEveryTenantOfThePeriodWhateverTenantIsSelected() {
+        InsightsFilter acmeSelected = new InsightsFilter("shop", FROM, TO, "acme", ContractTurns.PARIS);
+
+        TenantsPage page = pages().tenants(acmeSelected);
+
+        assertThat(page.tenants()).extracting(TenantUsage::tenantId).containsExactly("acme", "globex");
+        assertThat(page.tenants().get(0).turns()).isPositive();
+        assertThat(page.truncated()).isFalse();
+    }
+
+    @Test
+    void tenantsAreCappedToTheBusiest() {
+        InMemoryEventStore many = new InMemoryEventStore(1000);
+        for (int i = 0; i < DashboardPages.TENANTS + 1; i++) {
+            many.save(withTenant(ContractTurns.T1, "T" + i, "tenant-%03d".formatted(i)));
+        }
+        many.save(withTenant(ContractTurns.T1, "busy", "tenant-200"));
+
+        TenantsPage page = new DashboardPages(many, many, "shop", "USD", Clock.fixed(TO, ZoneOffset.UTC))
+            .tenants(SHOP);
+
+        assertThat(page.tenants()).hasSize(DashboardPages.TENANTS);
+        assertThat(page.tenants().get(0).tenantId()).isEqualTo("tenant-200");
+        assertThat(page.truncated()).isTrue();
+    }
+
+    private static ConversationTurn withTenant(ConversationTurn t, String turnId, String tenantId) {
+        return new ConversationTurn(turnId, t.application(), t.conversationId(), t.conversationIdMissing(),
+                t.startedAt(), t.userId(), tenantId, t.streaming(), t.outcome(), t.errorType(), t.latencyMs(),
+                t.timeToFirstTokenMs(), t.finishReasons(), t.modelCalls(), t.toolCalls(), t.retrievals(),
+                t.totalCost(), t.currency(), t.attributes(), t.userMessage(), t.assistantMessage(), t.offeredTools(),
+                t.traceId());
     }
 
     @Test

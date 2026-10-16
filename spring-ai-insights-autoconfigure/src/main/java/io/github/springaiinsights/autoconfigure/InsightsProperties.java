@@ -488,7 +488,8 @@ public class InsightsProperties {
 
         /**
          * Whether VectorStore beans that emit no observations (e.g. the Bedrock Knowledge Base store) are wrapped so
-         * their queries are recorded. Wrapped stores must be injected as VectorStore.
+         * their queries are recorded. Wrapped stores must be injected as VectorStore. Also observes the knowledge base
+         * searches of BedrockAgentRuntimeClient beans, when spring-ai-insights-bedrock is on the classpath.
          */
         private boolean observeStores = true;
 

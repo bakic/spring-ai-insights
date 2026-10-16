@@ -197,7 +197,9 @@ unless `dashboard.allow-anonymous=true` is set — the quickstart sets it for lo
 therefore reads: *dependency + one property → dashboard*.
 
 Tenant filter is a convenience filter: in v0.1 all dashboard readers are internal and see all
-tenants. Per-tenant access restriction is out of scope for v0.1.
+tenants. Per-tenant access restriction is out of scope for v0.1. The filter suggests the tenants
+active in the selected application and period, busiest first, capped at 200 (`/api/tenants`);
+any other tenant can still be typed.
 
 ### 8.8 Feedback API
 

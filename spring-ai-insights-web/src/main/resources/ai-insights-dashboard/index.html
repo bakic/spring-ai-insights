@@ -39,7 +39,9 @@
         </fieldset>
         <label class="field">
           <span>Tenant</span>
-          <input id="f-tenant" type="search" placeholder="All tenants" maxlength="200" autocomplete="off">
+          <input id="f-tenant" type="search" placeholder="All tenants" maxlength="200" autocomplete="off"
+            list="f-tenant-list">
+          <datalist id="f-tenant-list"></datalist>
         </label>
         <p class="zone" id="f-zone"></p>
       </form>

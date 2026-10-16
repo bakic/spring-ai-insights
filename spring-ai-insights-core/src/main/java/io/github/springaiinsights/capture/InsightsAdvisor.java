@@ -166,8 +166,9 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
             Map<String, @Nullable Object> context = request.context();
             Object conversationId = context.get(ChatMemory.CONVERSATION_ID);
             boolean conversationIdMissing = conversationId == null || conversationId.toString().isBlank();
+            ChatClientObservationContext chatClientContext = nearestChatClientContext(currentContext);
             TurnRecorder recorder = new TurnRecorder(UUID.randomUUID().toString(), application, Instant.now(),
-                    startNanos, streaming, identity(request),
+                    startNanos, streaming, identity(CallerIdentityCapture.captured(chatClientContext), request),
                     conversationIdMissing ? UUID.randomUUID().toString() : conversationId.toString(),
                     conversationIdMissing, costs);
             context.forEach((key, value) -> {
@@ -178,7 +179,6 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
             });
             recorder.offeredTools(offeredTools(request));
             recorder.traceId(traceId(currentContext));
-            ChatClientObservationContext chatClientContext = nearestChatClientContext(currentContext);
             if (chatClientContext != null) {
                 TurnRecorders.attach(chatClientContext, recorder);
             }
@@ -217,8 +217,8 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
         }
     }
 
-    private InsightsIdentity identity(ChatClientRequest request) {
-        InsightsIdentity identity = identities.resolve(request);
+    private InsightsIdentity identity(@Nullable InsightsIdentity captured, ChatClientRequest request) {
+        InsightsIdentity identity = captured != null ? captured : identities.resolve(request);
         if (identity == null) {
             return InsightsIdentity.ANONYMOUS;
         }

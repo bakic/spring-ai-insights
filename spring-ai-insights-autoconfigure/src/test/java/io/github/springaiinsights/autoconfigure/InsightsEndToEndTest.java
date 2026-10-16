@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,6 +32,9 @@ import io.github.springaiinsights.store.TurnQuery;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.ChatClientResponse;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -53,6 +57,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import software.amazon.awssdk.services.bedrockagentruntime.BedrockAgentRuntimeClient;
+import software.amazon.awssdk.services.bedrockagentruntime.model.KnowledgeBaseRetrievalResult;
+import software.amazon.awssdk.services.bedrockagentruntime.model.RetrieveRequest;
+import software.amazon.awssdk.services.bedrockagentruntime.model.RetrieveResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -123,6 +131,20 @@ class InsightsEndToEndTest {
             assertThat(r.store()).isEqualTo("fake_knowledge_base");
             assertThat(r.resultCount()).isEqualTo(2);
             assertThat(r.documentIds()).containsExactly("s3://kb/refunds.pdf");
+        });
+    }
+
+    @Test
+    void knowledgeBaseSearchedWithTheAwsSdkIsRecorded() {
+        ChatClientResponse response = builder.build().prompt().user("use bedrock").tools(tools).call().chatClientResponse();
+
+        ConversationTurn turn = recorded(response);
+        assertThat(turn.toolCalls()).extracting(ToolCallRecord::name).containsExactly("bedrock");
+        assertThat(turn.retrievals()).singleElement().satisfies(r -> {
+            assertThat(r.store()).isEqualTo("bedrock_knowledge_base");
+            assertThat(r.topK()).isEqualTo(5);
+            assertThat(r.resultCount()).isEqualTo(2);
+            assertThat(r.documentIds()).containsExactly("s3://kb/invoices.pdf", "s3://kb/payments.pdf");
         });
     }
 
@@ -214,6 +236,32 @@ class InsightsEndToEndTest {
     }
 
     @Test
+    void streamedTurnSubscribedWithoutBlockingRecordsTheSecurityPrincipal() {
+        SecurityContextHolder.getContext()
+            .setAuthentication(UsernamePasswordAuthenticationToken.authenticated("alice", null, List.of()));
+        List<ChatClientResponse> chunks = new CopyOnWriteArrayList<>();
+
+        // Apps that stream to an SseEmitter subscribe instead of blocking, so Reactor captures no thread locals.
+        builder.build()
+            .prompt()
+            .user("use lookup")
+            .advisors(MessageChatMemoryAdvisor.builder(MessageWindowChatMemory.builder().build()).build())
+            .advisors(a -> a.param(ChatMemory.CONVERSATION_ID, "c1"))
+            .tools(tools)
+            .stream()
+            .chatClientResponse()
+            .subscribe(chunks::add);
+
+        await().atMost(Duration.ofSeconds(10)).until(() -> !chunks.isEmpty());
+        String turnId = (String) chunks.get(0).context().get(InsightsContextKeys.TURN_ID);
+        ConversationTurn turn = await().atMost(Duration.ofSeconds(5))
+            .until(() -> store.findTurn(turnId), Optional::isPresent)
+            .orElseThrow();
+        assertThat(turn.userId())
+            .isEqualTo(new Pseudonymiser("k".getBytes(StandardCharsets.UTF_8)).pseudonymise("alice"));
+    }
+
+    @Test
     void streamedTurnIsRecordedWithTool() {
         List<ChatClientResponse> chunks = builder.build()
             .prompt()
@@ -278,7 +326,7 @@ class InsightsEndToEndTest {
         String text = ScriptedChatModel.userText(prompt);
         if (text.startsWith("use ") && ScriptedChatModel.toolResponses(prompt) == 0) {
             String tool = text.substring(4);
-            return List.of(ScriptedChatModel.toolCall(tool, tool.equals("lookup") || tool.equals("kb") ? "{\"query\":\"refunds\"}" : "{}"));
+            return List.of(ScriptedChatModel.toolCall(tool, tool.equals("lookup") || tool.equals("kb") || tool.equals("bedrock") ? "{\"query\":\"refunds\"}" : "{}"));
         }
         return List.of(ScriptedChatModel.text("answer", 20, 10));
     }
@@ -289,9 +337,23 @@ class InsightsEndToEndTest {
 
         private final VectorStore knowledgeBase;
 
-        Tools(SimpleVectorStore vectorStore, VectorStore knowledgeBase) {
+        private final BedrockAgentRuntimeClient bedrock;
+
+        Tools(SimpleVectorStore vectorStore, VectorStore knowledgeBase, BedrockAgentRuntimeClient bedrock) {
             this.vectorStore = vectorStore;
             this.knowledgeBase = knowledgeBase;
+            this.bedrock = bedrock;
+        }
+
+        @Tool(description = "Searches the Bedrock knowledge base with the AWS SDK")
+        public String bedrock(String query) {
+            return bedrock.retrieve(r -> r.knowledgeBaseId("KB1")
+                    .retrievalQuery(q -> q.text(query))
+                    .retrievalConfiguration(c -> c.vectorSearchConfiguration(v -> v.numberOfResults(5))))
+                .retrievalResults()
+                .stream()
+                .map(result -> result.content().text())
+                .collect(Collectors.joining("\n"));
         }
 
         @Tool(description = "Searches the knowledge base")
@@ -346,6 +408,35 @@ class InsightsEndToEndTest {
             return List.of(
                     Document.builder().text("refunds take 5 days").metadata("source", "s3://kb/refunds.pdf").score(0.9).build(),
                     Document.builder().text("refunds need a receipt").metadata("source", "s3://kb/refunds.pdf").score(0.8).build());
+        }
+    }
+
+    /** A Bedrock Agent Runtime client, as an application builds it: it emits no observation. */
+    static final class FakeBedrockAgentRuntime implements BedrockAgentRuntimeClient {
+
+        @Override
+        public RetrieveResponse retrieve(RetrieveRequest request) {
+            return RetrieveResponse.builder()
+                .retrievalResults(result("invoices are monthly", "s3://kb/invoices.pdf", 0.7),
+                        result("pay by card", "s3://kb/payments.pdf", 0.6))
+                .build();
+        }
+
+        private static KnowledgeBaseRetrievalResult result(String text, String uri, double score) {
+            return KnowledgeBaseRetrievalResult.builder()
+                .content(c -> c.text(text))
+                .location(l -> l.s3Location(s -> s.uri(uri)))
+                .score(score)
+                .build();
+        }
+
+        @Override
+        public String serviceName() {
+            return "bedrock-agent-runtime";
+        }
+
+        @Override
+        public void close() {
         }
     }
 
@@ -418,8 +509,14 @@ class InsightsEndToEndTest {
         }
 
         @Bean
-        Tools tools(SimpleVectorStore vectorStore, @Qualifier("knowledgeBase") VectorStore knowledgeBase) {
-            return new Tools(vectorStore, knowledgeBase);
+        Tools tools(SimpleVectorStore vectorStore, @Qualifier("knowledgeBase") VectorStore knowledgeBase,
+                BedrockAgentRuntimeClient bedrock) {
+            return new Tools(vectorStore, knowledgeBase, bedrock);
+        }
+
+        @Bean
+        BedrockAgentRuntimeClient bedrockAgentRuntimeClient() {
+            return new FakeBedrockAgentRuntime();
         }
 
         @Bean

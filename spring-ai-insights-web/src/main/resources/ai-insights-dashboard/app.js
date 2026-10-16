@@ -679,6 +679,7 @@
   const PAGES = { overview, usage, cost, knowledge, tools, quality };
 
   function route(focus) {
+    refreshTenants();
     const hash = location.hash.replace(/^#/, '') || 'overview';
     const [name, ...rest] = hash.split('/');
     for (const link of document.querySelectorAll('.rail a')) {
@@ -713,6 +714,35 @@
       });
   }
 
+  // The tenants of the selected application and period, busiest first; typing still accepts any tenant.
+  let tenantsKey = null;
+
+  function refreshTenants() {
+    const params = filterParams();
+    const key = `${state.app}|${state.period}`;
+    if (key === tenantsKey) {
+      return;
+    }
+    tenantsKey = key;
+    api('tenants', { app: params.app, from: params.from, to: params.to, zone: params.zone })
+      .then((data) => {
+        if (key !== tenantsKey) {
+          return;
+        }
+        const list = document.getElementById('f-tenant-list');
+        clear(list);
+        for (const t of data.tenants) {
+          list.append(el('option', { value: t.tenantId, label: `${count(t.turns)} ${t.turns === 1 ? 'turn' : 'turns'}` }));
+        }
+        document.getElementById('f-tenant').title = data.truncated
+          ? `The ${data.tenants.length} busiest tenants are listed. Type to filter on any other.`
+          : '';
+      })
+      .catch(() => {
+        tenantsKey = null;
+      });
+  }
+
   function setupFilters(config) {
     const select = document.getElementById('f-app');
     const apps = config.applications.includes(config.application)
@@ -732,9 +762,19 @@
       });
     }
     const tenant = document.getElementById('f-tenant');
-    tenant.addEventListener('change', () => {
-      state.tenant = tenant.value;
-      route(false);
+    const applyTenant = () => {
+      if (tenant.value !== state.tenant) {
+        state.tenant = tenant.value;
+        route(false);
+      }
+    };
+    tenant.addEventListener('change', applyTenant);
+    // Picking a listed tenant or clearing the field applies at once; other typing applies on Enter or leaving.
+    tenant.addEventListener('input', () => {
+      const listed = Array.from(document.getElementById('f-tenant-list').options).some((o) => o.value === tenant.value);
+      if (tenant.value === '' || listed) {
+        applyTenant();
+      }
     });
     document.getElementById('filters').addEventListener('submit', (event) => event.preventDefault());
     document.getElementById('f-zone').textContent = `Times in ${state.zone}`;

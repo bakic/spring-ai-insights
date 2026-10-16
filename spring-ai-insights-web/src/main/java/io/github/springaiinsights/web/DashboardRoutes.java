@@ -67,6 +67,7 @@ public final class DashboardRoutes {
             .GET(api + "/knowledge", request -> page(request, pages, clock, pages::knowledge))
             .GET(api + "/tools", request -> page(request, pages, clock, pages::tools))
             .GET(api + "/quality", request -> page(request, pages, clock, pages::quality))
+            .GET(api + "/tenants", request -> page(request, pages, clock, pages::tenants))
             .GET(api + "/conversation", request -> conversation(request, pages))
             .filter(headers(true))
             .filter(access(role, allowAnonymous))
