@@ -773,51 +773,296 @@
       ];
     }
     const feedback = new Map(data.feedback.map((f) => [f.turnId, f]));
-    const total = data.turns.reduce((sum, t) => sum + (t.totalCost === null ? 0 : Number(t.totalCost)), 0);
     return [
-      pageHead('Conversation', `${id} in ${app}: ${count(data.turns.length)} ${data.turns.length === 1 ? 'turn' : 'turns'}, ${money(total)}.`, back),
-      el('ol', { class: 'timeline' }, data.turns.map((t) => turnItem(t, feedback.get(t.turnId))))
+      pageHead('Conversation', `${plural(data.turns.length, 'turn', 'turns')} in ${app}, oldest first.`, back),
+      conversationSummary(app, id, data.turns, data.feedback),
+      el('ol', { class: 'turns' }, data.turns.map((t, k) => turnCard(t, k + 1, data.turns.length, feedback.get(t.turnId))))
     ];
   }
 
-  function turnItem(t, rating) {
-    const facts = [];
-    for (const call of t.modelCalls) {
-      facts.push(fact('Model', `${call.model}: ${count(call.inputTokens)} tokens in, ${count(call.outputTokens)} out, `
-        + `${duration(call.durationMs)}, ${money(call.cost)}${call.errorType ? `, failed with ${call.errorType}` : ''}`));
-    }
-    for (const tool of t.toolCalls) {
-      facts.push(fact('Tool', `${tool.name}: ${duration(tool.durationMs)}`
-        + (tool.outcome === 'ERROR' ? `, failed${tool.errorType ? ` with ${tool.errorType}` : ''}` : '')));
-    }
-    for (const r of t.retrievals) {
-      const best = r.scores.length ? `, best score ${twoDecimals.format(r.scores[0])}` : '';
-      const docs = r.documentIds.length ? `: ${r.documentIds.join(', ')}` : '';
-      facts.push(fact('Search', `${r.store}, ${count(r.resultCount)} results${best}${docs}`));
-    }
-    const messages = [];
+  function sum(items, value) {
+    return items.reduce((total, item) => total + Number(value(item) || 0), 0);
+  }
+
+  function conversationSummary(app, id, turns, ratings) {
+    const calls = turns.flatMap((t) => t.modelCalls);
+    const priced = turns.filter((t) => t.totalCost !== null && t.totalCost !== undefined);
+    const total = sum(priced, (t) => t.totalCost);
+    const failed = turns.filter((t) => t.outcome === 'ERROR').length;
+    const first = turns[0];
+    const last = turns[turns.length - 1];
+    const lastEnd = new Date(new Date(last.startedAt).getTime() + Number(last.latencyMs || 0));
+    const users = [...new Set(turns.map((t) => t.userId).filter(Boolean))];
+    const tenants = [...new Set(turns.map((t) => t.tenantId).filter(Boolean))];
+    const up = ratings.filter((r) => r.rating === 'UP').length;
+    const down = ratings.length - up;
+    const row = (label, ...value) => el('div', { class: 'row' }, el('dt', { text: label }), el('dd', null, value));
+    return el('section', { class: 'sheet statement convo' },
+      el('div', { class: 'due' },
+        el('h2', { text: 'Cost of the conversation' }),
+        el('p', { class: 'amount', text: priced.length ? money(total) : '—' }),
+        el('p', { text: `${plural(turns.length, 'turn', 'turns')} · ${priced.length ? money(total / priced.length) : '—'} per turn` }),
+        priced.length < turns.length
+          ? el('p', { class: 'warn', text: `${plural(turns.length - priced.length, 'turn has', 'turns have')} no price.` })
+          : null,
+        el('dl', { class: 'month' },
+          row('Tokens in', count(sum(calls, (c) => c.inputTokens))),
+          row('Tokens out', count(sum(calls, (c) => c.outputTokens))))),
+      el('dl', { class: 'reads convo-facts' },
+        row('Started', el('time', { datetime: first.startedAt, text: dateTime(first.startedAt) })),
+        row('Last answer', el('time', { datetime: lastEnd.toISOString(), text: dateTime(lastEnd.toISOString()) })),
+        row(users.length > 1 ? 'Users' : 'User', users.length ? users.map((u) => user(u)) : user(null)),
+        row('Tenant', tenants.length ? tenants.join(', ') : el('span', { class: 'muted', text: 'None' })),
+        row('Outcome', failed ? el('span', { class: 'change bad', text: `${plural(failed, 'failed turn', 'failed turns')}` })
+          : el('span', { text: 'Every turn succeeded' })),
+        row('Feedback', ratings.length ? `${count(up)} helpful, ${count(down)} not helpful`
+          : el('span', { class: 'muted', text: 'None given' })),
+        row('Steps', `${plural(calls.length, 'model call', 'model calls')}, `
+          + `${plural(sum(turns, (t) => t.toolCalls.length), 'tool call', 'tool calls')}, `
+          + `${plural(sum(turns, (t) => t.retrievals.length), 'search', 'searches')}`),
+        row('Conversation ID', el('code', { class: 'id', text: id }))));
+  }
+
+  function turnCard(t, number, total, rating) {
+    const cited = t.assistantMessage ? window.AiInsightsMarkdown.linkTargets(t.assistantMessage) : [];
+    const facts = [
+      el('time', { datetime: t.startedAt, text: dateTime(t.startedAt) }),
+      badge(t.outcome),
+      el('span', { title: 'Time to the complete answer', text: duration(t.latencyMs) }),
+      t.timeToFirstTokenMs !== null && t.timeToFirstTokenMs !== undefined
+        ? el('span', { title: 'Time to the first streamed token', text: `first token ${duration(t.timeToFirstTokenMs)}` }) : null,
+      el('span', { text: t.streaming ? 'streamed' : 'single answer' }),
+      el('span', { class: 'cost', text: money(t.totalCost) }),
+      rating ? badge(rating.rating, rating.rating === 'UP' ? 'rated helpful' : 'rated not helpful') : null,
+      t.traceId ? traceLink(t.traceId) : null
+    ];
+    return el('li', { class: `turn-card ${t.outcome}` },
+      el('header', { class: 'turn-bar' },
+        el('h2', { text: total > 1 ? `Turn ${number} of ${total}` : 'Turn' }),
+        el('p', { class: 'turn-facts' }, facts)),
+      el('div', { class: 'turn-body' },
+        el('div', { class: 'transcript' }, transcript(t, rating)),
+        el('aside', { class: 'receipt', 'aria-label': `What turn ${number} used` },
+          modelCalls(t.modelCalls),
+          toolCalls(t.toolCalls),
+          searches(t.retrievals, cited))));
+  }
+
+  function transcript(t, rating) {
+    const parts = [];
     if (t.userMessage) {
-      messages.push(el('p', { class: 'msg user' }, el('span', { class: 'who', text: 'User' }), t.userMessage));
+      parts.push(el('div', { class: 'said user' },
+        el('p', { class: 'who', text: 'User' }), el('p', { class: 'plain', text: t.userMessage })));
     }
     if (t.assistantMessage) {
-      messages.push(el('p', { class: 'msg assistant' }, el('span', { class: 'who', text: 'Assistant' }), t.assistantMessage));
+      parts.push(answer(t.assistantMessage));
     }
-    if (messages.length === 0) {
-      messages.push(el('p', { class: 'muted', text: 'Messages are not recorded (ai-insights.capture-content is off).' }));
+    if (parts.length === 0) {
+      parts.push(el('p', { class: 'muted', text: 'Messages are not recorded (ai-insights.capture-content is off).' }));
     }
-    return el('li', { class: `turn ${t.outcome}` },
-      el('div', { class: 'turn-head' },
-        el('time', { datetime: t.startedAt, text: dateTime(t.startedAt) }),
-        user(t.userId),
-        badge(t.outcome),
-        el('span', { class: 'muted', text: `${duration(t.latencyMs)}, ${money(t.totalCost)}` }),
-        t.errorType ? el('span', { class: 'muted', text: t.errorType }) : null,
-        t.traceId ? traceLink(t.traceId) : null),
-      messages,
-      facts.length ? el('ul', { class: 'facts' }, facts) : null,
-      rating ? el('p', { class: 'feedback' },
-        badge(rating.rating, rating.rating === 'UP' ? 'helpful' : 'not helpful'),
-        rating.comment ? ` ${rating.comment}` : null) : null);
+    if (t.outcome !== 'SUCCESS') {
+      parts.push(el('p', { class: `stop ${t.outcome}` },
+        el('strong', { text: t.outcome === 'ERROR' ? 'The turn failed' : 'The turn was cancelled' }),
+        t.errorType ? el('span', { text: ` with ${t.errorType}.` }) : '.'));
+    }
+    if (rating && rating.comment) {
+      parts.push(el('blockquote', { class: 'rating-comment' },
+        el('p', { class: 'who', text: rating.rating === 'UP' ? 'Feedback: helpful' : 'Feedback: not helpful' }),
+        el('p', { class: 'plain', text: rating.comment })));
+    }
+    return parts;
+  }
+
+  // The answer as the user read it: Markdown rendered as elements, long answers folded until asked.
+  function answer(text) {
+    const body = el('div', { class: 'md' }, window.AiInsightsMarkdown.parse(text).map(mdBlock));
+    const toggle = el('button', { type: 'button', class: 'unfold', 'aria-expanded': 'false', hidden: true,
+      text: 'Show the whole answer' });
+    const box = el('div', { class: 'said assistant folded' }, el('p', { class: 'who', text: 'Assistant' }), body, toggle);
+    toggle.addEventListener('click', () => {
+      const open = box.classList.toggle('folded') === false;
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.textContent = open ? 'Show less' : 'Show the whole answer';
+      if (!open) {
+        box.scrollIntoView({ block: 'nearest' });
+      }
+    });
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (body.scrollHeight > body.clientHeight + 8) {
+        toggle.hidden = false;
+      } else {
+        box.classList.remove('folded');
+      }
+    }));
+    return box;
+  }
+
+  function mdBlock(block) {
+    switch (block.type) {
+      case 'heading':
+        return el(`h${Math.min(block.level + 2, 6)}`, null, mdInline(block.inline));
+      case 'paragraph':
+        return el('p', null, mdInline(block.inline));
+      case 'list':
+        return el(block.ordered ? 'ol' : 'ul', { start: block.ordered && block.start !== 1 ? block.start : null },
+          block.items.map((item) => el('li', null, item.map(mdBlock))));
+      case 'code':
+        return el('figure', { class: 'code' },
+          block.lang ? el('figcaption', { text: block.lang }) : null,
+          el('pre', { tabindex: '0' }, el('code', { text: block.text })));
+      case 'quote':
+        return el('blockquote', null, block.blocks.map(mdBlock));
+      case 'rule':
+        return el('hr');
+      case 'table': {
+        const align = (k) => (block.align[k] ? `al-${block.align[k]}` : null);
+        return el('div', { class: 'scroll' }, el('table', null,
+          el('thead', null, el('tr', null, block.head.map((cell, k) => el('th', { class: align(k) }, mdInline(cell))))),
+          el('tbody', null, block.rows.map((row) => el('tr', null,
+            row.map((cell, k) => el('td', { class: align(k) }, mdInline(cell))))))));
+      }
+      default:
+        return null;
+    }
+  }
+
+  function mdInline(nodes) {
+    return nodes.map((node) => {
+      switch (node.type) {
+        case 'text':
+          return node.text;
+        case 'break':
+          return el('br');
+        case 'code':
+          return el('code', { text: node.text });
+        case 'strong':
+          return el('strong', null, mdInline(node.children));
+        case 'em':
+          return el('em', null, mdInline(node.children));
+        case 'link': {
+          const href = window.AiInsightsMarkdown.safeHref(node.href);
+          return href
+            ? el('a', { href, target: '_blank', rel: 'noopener noreferrer', title: href }, mdInline(node.children))
+            : el('span', { class: 'ref', title: node.href }, mdInline(node.children));
+        }
+        default:
+          return null;
+      }
+    });
+  }
+
+  /** A readable name for a model id; Bedrock ARNs keep only their resource name. The full id stays in the title. */
+  function modelName(model) {
+    if (!model) {
+      return '—';
+    }
+    if (!model.startsWith('arn:')) {
+      return model;
+    }
+    const resource = model.slice(model.lastIndexOf(':') + 1);
+    const [type, ...name] = resource.split('/');
+    return /inference-profile/.test(type) ? `profile ${name.join('/')}` : name.join('/') || resource;
+  }
+
+  /** A document id as a name and the folder it sits in. */
+  function documentName(id) {
+    const path = String(id).replace(/^[a-z][a-z0-9+.-]*:\/\/[^/]*\/?/i, '').replace(/[?#].*$/, '');
+    const parts = path.split('/').filter(Boolean);
+    if (parts.length === 0) {
+      return { name: String(id), folder: '' };
+    }
+    return { name: parts[parts.length - 1], folder: parts.slice(-3, -1).join('/') };
+  }
+
+  function receiptPart(title, summary, ...content) {
+    return el('section', { class: 'part' },
+      el('h3', null, title, summary ? el('span', { class: 'muted', text: summary }) : null), content);
+  }
+
+  /** A model's provider and full id/ARN, shown in full rather than hidden behind a hover title. */
+  function modelIdentity(provider, model) {
+    return el('p', { class: 'model' },
+      el('span', { class: 'model-name', text: modelName(model) }),
+      el('span', { class: 'model-full', text: `${provider}: ${model}` }));
+  }
+
+  function modelCalls(calls) {
+    if (calls.length === 0) {
+      return null;
+    }
+    const cached = calls.some((c) => c.cacheReadTokens > 0 || c.cacheWriteTokens > 0);
+    const cachedCell = (c) => el('td', { class: 'num' },
+      c.cacheReadTokens > 0 ? el('span', { class: 'cache-read', title: 'tokens read from cache', text: count(c.cacheReadTokens) }) : null,
+      c.cacheWriteTokens > 0 ? el('span', { class: 'cache-write', title: 'tokens written to cache', text: count(c.cacheWriteTokens) }) : null,
+      c.cacheReadTokens === 0 && c.cacheWriteTokens === 0 ? '—' : null);
+    const total = calls.length > 1 ? el('tfoot', null, el('tr', null,
+      el('th', { scope: 'row', text: 'Total' }),
+      el('td', { class: 'num', text: count(sum(calls, (c) => c.inputTokens)) }),
+      el('td', { class: 'num', text: count(sum(calls, (c) => c.outputTokens)) }),
+      cached ? cachedCell({
+        cacheReadTokens: sum(calls, (c) => c.cacheReadTokens),
+        cacheWriteTokens: sum(calls, (c) => c.cacheWriteTokens),
+      }) : null,
+      el('td', { class: 'num', text: duration(sum(calls, (c) => c.durationMs)) }),
+      el('td', { class: 'num', text: calls.every((c) => c.cost === null) ? '—' : money(sum(calls, (c) => c.cost)) }))) : null;
+    const models = [...new Set(calls.map((c) => c.model))];
+    return receiptPart('Model calls', ` ${count(calls.length)}`,
+      models.length === 1 ? modelIdentity(calls[0].provider, models[0]) : null,
+      el('table', { class: 'calls' },
+        el('thead', null, el('tr', null,
+          el('th', { text: '#' }), el('th', { class: 'num', text: 'In' }), el('th', { class: 'num', text: 'Out' }),
+          cached ? el('th', { class: 'num', text: 'Cached' }) : null,
+          el('th', { class: 'num', text: 'Time' }), el('th', { class: 'num', text: 'Cost' }))),
+        el('tbody', null, calls.map((c, k) => el('tr', { class: c.errorType ? 'failed' : null },
+          el('th', { scope: 'row' }, String(k + 1),
+            models.length > 1 ? modelIdentity(c.provider, c.model) : null,
+            c.errorType ? el('span', { class: 'fail-text', text: `failed: ${c.errorType}` }) : null),
+          el('td', { class: 'num', text: count(c.inputTokens) }),
+          el('td', { class: 'num', text: count(c.outputTokens) }),
+          cached ? cachedCell(c) : null,
+          el('td', { class: 'num', text: duration(c.durationMs) }),
+          el('td', { class: 'num', text: money(c.cost) })))),
+        total));
+  }
+
+  function toolCalls(calls) {
+    if (calls.length === 0) {
+      return null;
+    }
+    return receiptPart('Tool calls', ` ${count(calls.length)}`,
+      el('ol', { class: 'steps' }, calls.map((c) => el('li', { class: c.outcome === 'ERROR' ? 'failed' : null },
+        el('code', { text: c.name }),
+        el('span', { class: 'muted', text: duration(c.durationMs) }),
+        c.outcome === 'ERROR' ? el('span', { class: 'fail-text', text: c.errorType ? `failed: ${c.errorType}` : 'failed' }) : null))));
+  }
+
+  function searches(retrievals, cited) {
+    if (retrievals.length === 0) {
+      return null;
+    }
+    const top = Math.max(1, ...retrievals.flatMap((r) => r.scores));
+    return receiptPart('Knowledge base searches', ` ${count(retrievals.length)}`, retrievals.map((r) => {
+      const scored = r.scores.length === r.documentIds.length;
+      const citedHere = r.documentIds.filter((d) => cited.includes(d)).length;
+      return el('div', { class: 'search' },
+        el('p', { class: 'search-head' },
+          el('span', { text: r.store }),
+          el('span', { class: 'muted', text: ` · ${plural(r.resultCount, 'result', 'results')} · ${duration(r.durationMs)}` }),
+          citedHere ? el('span', { class: 'cited-count', text: ` · ${count(citedHere)} cited` }) : null),
+        r.documentIds.length === 0 ? el('p', { class: 'muted', text: 'No document came back.' })
+          : el('ol', { class: 'docs' }, r.documentIds.map((d, k) => {
+            const doc = documentName(d);
+            const score = scored ? r.scores[k] : null;
+            const bar = el('span', { class: 'score-bar', 'aria-hidden': 'true' }, el('i'));
+            bar.firstChild.style.width = `${score === null ? 0 : Math.max(2, Math.round(100 * score / top))}%`;
+            return el('li', { class: cited.includes(d) ? 'cited' : null, title: d },
+              el('span', { class: 'doc' },
+                el('span', { class: 'doc-name', text: doc.name }),
+                doc.folder ? el('span', { class: 'doc-folder', text: doc.folder }) : null),
+              cited.includes(d) ? el('span', { class: 'tag', text: 'cited' }) : el('span'),
+              el('span', { class: 'score' }, score === null ? '' : twoDecimals.format(score), bar));
+          })));
+    }));
   }
 
   function traceLink(traceId) {
@@ -829,10 +1074,6 @@
       class: 'id trace', href: template.split('{traceId}').join(encodeURIComponent(traceId)),
       target: '_blank', rel: 'noopener noreferrer', title: `Open trace ${traceId}`, text: `trace ${shortId(traceId)}`
     });
-  }
-
-  function fact(kind, text) {
-    return el('li', null, el('span', { class: 'kind', text: kind }), text);
   }
 
   // ---- Navigation and filters --------------------------------------------------------------------

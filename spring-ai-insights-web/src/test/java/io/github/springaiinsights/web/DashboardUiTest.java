@@ -23,7 +23,7 @@ class DashboardUiTest {
 
     private static final String SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 
-    private static final List<String> FILES = List.of("index.html", "app.js", "app.css");
+    private static final List<String> FILES = List.of("index.html", "markdown.js", "app.js", "app.css");
 
     private final InMemoryEventStore store = new InMemoryEventStore(10);
 
@@ -95,11 +95,12 @@ class DashboardUiTest {
 
     @Test
     void scriptsNeverUseInnerHtml() throws IOException {
-        String js = file("app.js");
-
-        for (String sink : List.of("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(",
-                "new Function")) {
-            assertThat(js).as(sink).doesNotContain(sink);
+        for (String script : List.of("markdown.js", "app.js")) {
+            String js = file(script);
+            for (String sink : List.of("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "eval(",
+                    "new Function")) {
+                assertThat(js).as(script + ": " + sink).doesNotContain(sink);
+            }
         }
     }
 
@@ -115,6 +116,8 @@ class DashboardUiTest {
     void onlyRelativeUrls() throws IOException {
         String index = file("index.html");
         assertThat(index).contains("src=\"assets/app.js\"").contains("href=\"assets/app.css\"");
+        // app.js reads the Markdown reader at render time, so the reader must load first.
+        assertThat(index.indexOf("src=\"assets/markdown.js\"")).isPositive().isLessThan(index.indexOf("src=\"assets/app.js\""));
         assertThat(file("app.js")).doesNotContain("'/api").doesNotContain("\"/api").doesNotContain("`/api");
     }
 }

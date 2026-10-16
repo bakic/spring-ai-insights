@@ -15,3 +15,15 @@ tasks.register<JavaExec>("previewDashboard") {
     classpath = sourceSets["test"].runtimeClasspath
     mainClass.set("io.github.springaiinsights.web.DashboardPreview")
 }
+
+val testDashboardScripts by tasks.registering(Exec::class) {
+    description = "Runs the dashboard script tests with Node.js 20 or later"
+    group = "verification"
+    inputs.dir("src/main/resources/ai-insights-dashboard")
+    inputs.dir("src/test/js")
+    commandLine("node", "--test", "src/test/js/markdown.test.mjs")
+}
+
+tasks.named("check") {
+    dependsOn(testDashboardScripts)
+}
