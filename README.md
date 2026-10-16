@@ -317,6 +317,33 @@ Without Spring Security the dashboard is **off**, unless you set `ai-insights.da
 - Try it with generated data: `./gradlew :spring-ai-insights-web:previewDashboard`, then open
   http://localhost:8089/ai-insights/.
 
+### Deployment topologies
+
+Every turn is tagged with `ai-insights.application` (`spring.application.name` by default), and the
+analytics API and dashboard both filter by it. Two topologies follow from that:
+
+- **Per-service (default).** Each app adds the full starter (`spring-ai-insights-starter`), stores its
+  own turns (in memory, or its own MongoDB), and serves its own `/ai-insights/`. Simplest to reason
+  about; no shared infrastructure beyond what the app already has.
+- **Shared hub.** Many apps point at **one shared MongoDB**, each with its own `ai-insights.application`
+  name; only one app (a small dashboard-only service, or one of the real apps) enables the dashboard.
+  That single dashboard lists every application in the filter dropdown (`GET /ai-insights/api/config`
+  returns `applications: [...]`), with no code beyond the starter dependency and Mongo credentials on
+  either side. A dashboard-only hub needs no `ChatModel` or Spring AI wiring at all — just the starter,
+  `spring-boot-starter-data-mongodb`, and Spring Security for its own login.
+
+  The shared hub is worth it once you have more than a couple of AI-enabled services: it gives you one
+  place to secure and network-isolate (VPN/bastion/ingress rule, see below) instead of one per service,
+  while every contributing team still only adds a dependency and a couple of properties.
+
+Regardless of topology, the dashboard is a normal MVC route on the app's own port — plan its network
+exposure like any other internal admin page: a path-based ingress rule limiting `/ai-insights/**` (or
+the hub's whole port) to your internal network, or VPN/bastion/`kubectl port-forward` access, while
+your REST APIs stay public. The [Weekly report](#weekly-report) below reaches most stakeholders over
+Slack/email without needing network access to the dashboard at all, and the
+[Observability backends](#observability-backends) section covers exporting the same metrics to a
+Prometheus/Grafana stack you may already expose internally.
+
 ## Weekly report
 
 Every Monday at 08:00, a short summary of last week goes to Slack and/or by email, for people who
