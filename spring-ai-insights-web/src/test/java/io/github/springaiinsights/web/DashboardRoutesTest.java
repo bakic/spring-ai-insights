@@ -110,6 +110,10 @@ class DashboardRoutesTest {
         mvc.perform(get("/ai-insights/api/cost" + RANGE)).andExpect(jsonPath("$.monthEndProjection").value(0.020488));
         mvc.perform(get("/ai-insights/api/knowledge" + RANGE)).andExpect(jsonPath("$.retrievalTurns").value(2));
         mvc.perform(get("/ai-insights/api/tools" + RANGE)).andExpect(jsonPath("$.tools[0].tool").value("lookup"));
+        mvc.perform(get("/ai-insights/api/tenants" + RANGE + "&tenant=acme"))
+            .andExpect(jsonPath("$.tenants[0].tenantId").value("acme"))
+            .andExpect(jsonPath("$.tenants[1].tenantId").value("globex"))
+            .andExpect(jsonPath("$.truncated").value(false));
         mvc.perform(get("/ai-insights/api/tools" + RANGE)).andExpect(jsonPath("$.neverCalled[0]").value("search"))
             .andExpect(jsonPath("$.offeredRecorded").value(true));
         mvc.perform(get("/ai-insights/api/knowledge" + RANGE))

@@ -15,6 +15,7 @@ import java.util.TreeSet;
 import io.github.springaiinsights.analytics.Granularity;
 import io.github.springaiinsights.analytics.InsightsAnalytics;
 import io.github.springaiinsights.analytics.InsightsFilter;
+import io.github.springaiinsights.analytics.TenantUsage;
 import io.github.springaiinsights.analytics.TimeBucket;
 import io.github.springaiinsights.analytics.ToolUsage;
 import io.github.springaiinsights.analytics.UsageSummary;
@@ -30,6 +31,7 @@ import io.github.springaiinsights.web.pages.DashboardConfig;
 import io.github.springaiinsights.web.pages.KnowledgePage;
 import io.github.springaiinsights.web.pages.OverviewPage;
 import io.github.springaiinsights.web.pages.QualityPage;
+import io.github.springaiinsights.web.pages.TenantsPage;
 import io.github.springaiinsights.web.pages.ToolsPage;
 import io.github.springaiinsights.web.pages.TurnRow;
 import io.github.springaiinsights.web.pages.UsagePage;
@@ -53,6 +55,8 @@ public final class DashboardPages {
     static final int RECENT_ABANDONED = 20;
 
     static final int NEVER_RETRIEVED_SAMPLE = 50;
+
+    static final int TENANTS = 200;
 
     private static final int MONEY_SCALE = 6;
 
@@ -92,6 +96,13 @@ public final class DashboardPages {
     public DashboardConfig config() {
         return new DashboardConfig(application, analytics.applications(), currency, storeName(store),
                 store instanceof InMemoryEventStore, options.traceUrl());
+    }
+
+    /** Tenants of the application and period, whatever tenant the filter selects, so the list offers all of them. */
+    public TenantsPage tenants(InsightsFilter filter) {
+        List<TenantUsage> tenants = analytics.tenants(
+                new InsightsFilter(filter.application(), filter.from(), filter.to(), null, filter.zone()));
+        return new TenantsPage(tenants.stream().limit(TENANTS).toList(), tenants.size() > TENANTS);
     }
 
     public OverviewPage overview(InsightsFilter filter) {
