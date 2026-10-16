@@ -455,7 +455,7 @@
   }
 
   /** The one plain-language answer the statement leads with, built from the readings only. */
-  function answer(now) {
+  function overviewSummary(now) {
     if (now.turns === 0) {
       return `Nobody used the assistant ${PERIOD_TEXT[state.period]}.`;
     }
@@ -508,7 +508,7 @@
             costRow('Estimated month end', spend.monthEndProjection === null ? 'after day one' : moneyHeadline(spend.monthEndProjection))),
 ),
         el('div', { class: 'reads' },
-          el('p', { class: 'answer', text: answer(now) }),
+          el('p', { class: 'answer', text: overviewSummary(now) }),
           meterTable([
             { label: 'Turns', now: now.turns, before: before.turns, value: count, change: { text: change(now.turns, before.turns) } },
             { label: 'Conversations', now: now.conversations, before: before.conversations, value: count,
