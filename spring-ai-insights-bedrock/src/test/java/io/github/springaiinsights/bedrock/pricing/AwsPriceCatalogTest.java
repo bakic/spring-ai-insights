@@ -235,6 +235,28 @@ class AwsPriceCatalogTest {
     }
 
     @Test
+    void nextDelayBacksOffOnFailureAndResetsOnSuccess() {
+        AwsPriceCatalog catalog = catalog(yaml());
+        assertThat(catalog.nextDelay(false)).isEqualTo(Duration.ofMinutes(5));
+        assertThat(catalog.nextDelay(false)).isEqualTo(Duration.ofMinutes(10));
+        assertThat(catalog.nextDelay(false)).isEqualTo(Duration.ofMinutes(20));
+        assertThat(catalog.nextDelay(true)).isEqualTo(Duration.ofHours(1));
+        assertThat(catalog.nextDelay(false)).isEqualTo(Duration.ofMinutes(5));
+    }
+
+    @Test
+    void nextDelayCapsBackoffAtRefresh() {
+        AwsPriceCatalog catalog = new AwsPriceCatalog(() -> pricing, () -> bedrock, () -> REGION,
+                Duration.ofHours(1), yaml(), new SimpleMeterRegistry());
+        assertThat(catalog.nextDelay(false)).isEqualTo(Duration.ofMinutes(5));
+        assertThat(catalog.nextDelay(false)).isEqualTo(Duration.ofMinutes(10));
+        assertThat(catalog.nextDelay(false)).isEqualTo(Duration.ofMinutes(20));
+        assertThat(catalog.nextDelay(false)).isEqualTo(Duration.ofMinutes(40));
+        assertThat(catalog.nextDelay(false)).isEqualTo(Duration.ofMinutes(60));
+        assertThat(catalog.nextDelay(false)).isEqualTo(Duration.ofMinutes(60));
+    }
+
+    @Test
     void rejectsRefreshBelowOneHour() {
         assertThatIllegalArgumentException().isThrownBy(
                 () -> new AwsPriceCatalog(() -> pricing, () -> bedrock, () -> REGION, Duration.ofMinutes(59),

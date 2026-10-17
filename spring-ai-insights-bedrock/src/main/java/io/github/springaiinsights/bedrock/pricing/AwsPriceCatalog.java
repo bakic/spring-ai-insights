@@ -41,6 +41,10 @@ public final class AwsPriceCatalog implements PriceCatalog, AutoCloseable {
 
     private static final Log logger = LogFactory.getLog(AwsPriceCatalog.class);
 
+    /** Delay before the first retry after a failed refresh; doubles on each consecutive failure thereafter,
+     * capped at {@code refresh}. */
+    private static final Duration INITIAL_BACKOFF = Duration.ofMinutes(5);
+
     private record Snapshot(Map<String, String> modelNames, Map<PriceKey, ModelPrice> prices) {
     }
 
@@ -62,6 +66,9 @@ public final class AwsPriceCatalog implements PriceCatalog, AutoCloseable {
     private volatile @Nullable Snapshot snapshot;
 
     private @Nullable ScheduledExecutorService scheduler;
+
+    /** Backoff to use for the next retry after a failure; reset to {@link #INITIAL_BACKOFF} on success. */
+    private Duration nextBackoff = INITIAL_BACKOFF;
 
     public AwsPriceCatalog(Supplier<PricingClient> pricing, Supplier<BedrockClient> bedrock,
             Supplier<String> region, Duration refresh, PriceCatalog fallback, MeterRegistry registry) {
@@ -124,8 +131,9 @@ public final class AwsPriceCatalog implements PriceCatalog, AutoCloseable {
     }
 
     /** Refreshes the snapshot now, synchronously. Never throws: a failure is logged and counted, and the
-     * previous snapshot (or none) is kept; the suppliers are called again at the next refresh. */
-    synchronized void refresh() {
+     * previous snapshot (or none) is kept; the suppliers are called again at the next refresh. Returns
+     * whether the refresh succeeded, so the caller can schedule the next attempt accordingly. */
+    synchronized boolean refresh() {
         try {
             String region = regionSupplier.get();
             Map<String, String> modelNames = new LinkedHashMap<>();
@@ -145,11 +153,13 @@ public final class AwsPriceCatalog implements PriceCatalog, AutoCloseable {
             logger.info("ai-insights: loaded Amazon Bedrock list prices for " + pricedModels + " models in "
                     + region);
             registry.counter("ai.insights.pricing.refresh", "outcome", "success").increment();
+            return true;
         }
         catch (Exception | LinkageError e) {
             logger.warn("ai-insights: Amazon Bedrock price list refresh failed: " + e);
             logger.debug("Refresh failed", e);
             registry.counter("ai.insights.pricing.refresh", "outcome", "failure").increment();
+            return false;
         }
     }
 
@@ -170,7 +180,9 @@ public final class AwsPriceCatalog implements PriceCatalog, AutoCloseable {
         return products;
     }
 
-    /** Refreshes now, then every {@code refresh}, on a single daemon thread. */
+    /** Refreshes now, then self-reschedules: after {@code refresh} on success, or after a backoff starting
+     * at {@link #INITIAL_BACKOFF} and doubling on each consecutive failure, capped at {@code refresh}. Runs
+     * on a single daemon thread. */
     public synchronized void start() {
         if (scheduler != null) {
             return;
@@ -180,7 +192,35 @@ public final class AwsPriceCatalog implements PriceCatalog, AutoCloseable {
             thread.setDaemon(true);
             return thread;
         });
-        scheduler.scheduleWithFixedDelay(this::refresh, 0, refresh.toMillis(), TimeUnit.MILLISECONDS);
+        scheduler.schedule(this::runAndReschedule, 0, TimeUnit.MILLISECONDS);
+    }
+
+    /** Runs one refresh, then schedules the next one. Not synchronized itself so the lock is never held
+     * across the network call and the reschedule together, avoiding a deadlock with {@link #close()}. */
+    private void runAndReschedule() {
+        boolean success = refresh();
+        Duration delay = nextDelay(success);
+        scheduleNext(delay);
+    }
+
+    private synchronized void scheduleNext(Duration delay) {
+        if (scheduler != null) {
+            scheduler.schedule(this::runAndReschedule, delay.toMillis(), TimeUnit.MILLISECONDS);
+        }
+    }
+
+    /** Computes the delay before the next attempt and updates the backoff state. Success always resets the
+     * backoff to {@link #INITIAL_BACKOFF} and waits the full {@code refresh} interval; a failure waits the
+     * current backoff (capped at {@code refresh}) and doubles the backoff for the next failure. */
+    synchronized Duration nextDelay(boolean success) {
+        if (success) {
+            nextBackoff = INITIAL_BACKOFF;
+            return refresh;
+        }
+        Duration delay = nextBackoff.compareTo(refresh) <= 0 ? nextBackoff : refresh;
+        Duration doubled = nextBackoff.multipliedBy(2);
+        nextBackoff = doubled.compareTo(refresh) <= 0 ? doubled : refresh;
+        return delay;
     }
 
     @Override

@@ -259,11 +259,15 @@ ai-insights:
 - **AWS wins.** The AWS Price List API price is used whenever Bedrock has one; `ai-insights.pricing.models`
   is the fallback — for models AWS does not price, before the first successful load, and while AWS is
   unreachable.
+- **Reuses your own clients.** If the application context has exactly one `PricingClient` bean and exactly
+  one `BedrockClient` bean, ai-insights reuses them instead of building its own; `endpoint-region` and
+  `region` then only apply to clients ai-insights builds itself. When reusing a `BedrockClient`, make sure
+  its region matches the region you want priced.
 - **Refresh and failures.** Prices are loaded in the background right after startup and every `refresh`
   (default `24h`, minimum `1h`); a failed load or refresh never fails or slows down startup — it logs one
-  warning and keeps the last good prices (or the YAML fallback if there is none yet). Lookups never call
-  AWS on the chat path. Each refresh attempt increments the `ai.insights.pricing.refresh` counter
-  (tag `outcome=success|failure`).
+  warning and keeps the last good prices (or the YAML fallback if there is none yet), and retries after 5
+  minutes, doubling on each consecutive failure up to `refresh`. Lookups never call AWS on the chat path.
+  Each refresh attempt increments the `ai.insights.pricing.refresh` counter (tag `outcome=success|failure`).
 - **IAM and network.** Needs `pricing:GetProducts` and `bedrock:ListFoundationModels`. The Price List API
   call goes to `api.pricing.<endpoint-region>.amazonaws.com`; corporate proxies (observed with Zscaler)
   may block this host, in which case pricing falls back to YAML as above.
