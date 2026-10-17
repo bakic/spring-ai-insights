@@ -31,6 +31,8 @@ import org.springframework.ai.chat.client.ChatClientBuilderCustomizer;
 import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.SmartInitializingSingleton;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.boot.LazyInitializationExcludeFilter;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
@@ -59,6 +61,13 @@ public class InsightsAutoConfiguration {
     static final String MONGODB_MISSING = "ai-insights.store=mongodb requires Spring Data MongoDB and a single "
             + "MongoOperations bean (for example the auto-configured MongoTemplate)";
 
+    static final String AWS_PRICING_MISSING = "ai-insights.pricing.aws.enabled=true requires "
+            + "spring-ai-insights-bedrock and the AWS SDK modules software.amazon.awssdk:pricing and "
+            + "software.amazon.awssdk:bedrock";
+
+    static final String AWS_PRICING_CURRENCY = "ai-insights.pricing.aws.enabled=true requires "
+            + "ai-insights.pricing.currency=USD (AWS list prices are in USD)";
+
     private static final Log logger = LogFactory.getLog(InsightsAutoConfiguration.class);
 
     public InsightsAutoConfiguration() {
@@ -83,7 +92,22 @@ public class InsightsAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     PriceCatalog insightsPriceCatalog(InsightsProperties properties) {
+        if (properties.getPricing().getAws().isEnabled()) {
+            throw new IllegalStateException(AWS_PRICING_MISSING);
+        }
         return configuredPriceCatalog(properties);
+    }
+
+    @Bean
+    @ConditionalOnBooleanProperty(name = "ai-insights.pricing.aws.enabled")
+    static SmartInitializingSingleton insightsAwsPriceCatalogCustomCatalogLog(
+            ConfigurableListableBeanFactory beanFactory) {
+        return () -> {
+            if (!beanFactory.containsBean("insightsAwsPriceCatalog")) {
+                logger.info("ai-insights: a custom PriceCatalog bean is defined, so ai-insights.pricing.aws is not "
+                        + "applied");
+            }
+        };
     }
 
     static ConfiguredPriceCatalog configuredPriceCatalog(InsightsProperties properties) {

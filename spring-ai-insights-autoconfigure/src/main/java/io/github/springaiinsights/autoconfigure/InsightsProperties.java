@@ -200,6 +200,8 @@ public class InsightsProperties {
         /** Prices per 1,000,000 tokens. */
         private List<ModelPricing> models = new ArrayList<>();
 
+        private final Aws aws = new Aws();
+
         public String getCurrency() {
             return currency;
         }
@@ -214,6 +216,62 @@ public class InsightsProperties {
 
         public void setModels(List<ModelPricing> models) {
             this.models = models;
+        }
+
+        public Aws getAws() {
+            return aws;
+        }
+
+        /**
+         * Automatic pricing of Amazon Bedrock models from the AWS Price List API, refreshed periodically, with the
+         * YAML {@link #models} as fallback. Opt-in; requires {@code currency=USD}, the {@code spring-ai-insights-bedrock}
+         * module and the {@code software.amazon.awssdk:pricing} / {@code software.amazon.awssdk:bedrock} jars.
+         */
+        public static class Aws {
+
+            /** Whether Amazon Bedrock models are priced from the AWS Price List API. */
+            private boolean enabled = false;
+
+            /** Bedrock region to price; default {@code spring.ai.bedrock.aws.region}, else the SDK default region. */
+            private @Nullable String region;
+
+            /** Price List API endpoint region: {@code us-east-1} (default), {@code eu-central-1} or {@code ap-south-1}. */
+            private String endpointRegion = "us-east-1";
+
+            /** How often the price list is refreshed (at least 1 hour). */
+            private Duration refresh = Duration.ofHours(24);
+
+            public boolean isEnabled() {
+                return enabled;
+            }
+
+            public void setEnabled(boolean enabled) {
+                this.enabled = enabled;
+            }
+
+            public @Nullable String getRegion() {
+                return region;
+            }
+
+            public void setRegion(@Nullable String region) {
+                this.region = region;
+            }
+
+            public String getEndpointRegion() {
+                return endpointRegion;
+            }
+
+            public void setEndpointRegion(String endpointRegion) {
+                this.endpointRegion = endpointRegion;
+            }
+
+            public Duration getRefresh() {
+                return refresh;
+            }
+
+            public void setRefresh(Duration refresh) {
+                this.refresh = refresh;
+            }
         }
     }
 

@@ -86,6 +86,13 @@ warning at startup when it finds 2.0.0.
    Because of substring matching, `gpt-4o` also matches `gpt-4o-mini`. List every model you use,
    so the more specific entry (`gpt-4o-mini`) wins over the shorter one.
 
+   Amazon Bedrock geographic inference profiles (`eu.`, `us.`, `apac.`, …) and `global.` profiles are
+   priced differently — in `eu-west-1`, Claude Sonnet 4.6 is 3.30 / 16.50 per 1M input/output tokens
+   through an `eu.` profile but 3.00 / 15.00 through a `global.` profile — so a single substring entry
+   cannot price both correctly. For Bedrock, see
+   [Automatic Amazon Bedrock pricing](#automatic-amazon-bedrock-pricing) below instead of hand-typing
+   these prices.
+
    Models without a price are still recorded, with a `null` cost, one warning, and the `ai.insights.unpriced.models` counter.
 
 4. Use the auto-configured `ChatClient.Builder` as usual. The advisor is added for you:
@@ -225,6 +232,55 @@ Clients are observed only when they are Spring beans, so inject the client as
 For other stores, define a `KnowledgeCorpusCatalog` bean: its `store()` is the store name shown on
 the Knowledge base page, and `documentIds()` returns the IDs the `document-key` metadata takes
 (`null` while not loaded yet).
+
+## Automatic Amazon Bedrock pricing
+
+Instead of hand-typing Amazon Bedrock model prices (and having them drift from reality — in
+`eu-west-1`, Claude Sonnet 4.6 is 3.30 / 16.50 per 1M input/output tokens through an `eu.` inference
+profile but 3.00 / 15.00 through a `global.` profile), `spring-ai-insights-bedrock` can price Bedrock
+model calls automatically from the AWS Price List API:
+
+```kotlin
+implementation("io.github.springaiinsights:spring-ai-insights-bedrock:0.1.0-SNAPSHOT")
+```
+
+```yaml
+ai-insights:
+  pricing:
+    currency: USD               # must be USD when aws.enabled=true
+    aws:
+      enabled: true             # default false
+      region: eu-west-1         # Bedrock region to price; default spring.ai.bedrock.aws.region, else SDK default
+      endpoint-region: us-east-1  # Price List API endpoint: us-east-1 (default), eu-central-1 or ap-south-1
+      refresh: 24h              # ≥ 1h
+    models: []                  # still used for non-Bedrock models and as fallback
+```
+
+- **AWS wins.** The AWS Price List API price is used whenever Bedrock has one; `ai-insights.pricing.models`
+  is the fallback — for models AWS does not price, before the first successful load, and while AWS is
+  unreachable.
+- **Refresh and failures.** Prices are loaded in the background right after startup and every `refresh`
+  (default `24h`, minimum `1h`); a failed load or refresh never fails or slows down startup — it logs one
+  warning and keeps the last good prices (or the YAML fallback if there is none yet). Lookups never call
+  AWS on the chat path. Each refresh attempt increments the `ai.insights.pricing.refresh` counter
+  (tag `outcome=success|failure`).
+- **IAM and network.** Needs `pricing:GetProducts` and `bedrock:ListFoundationModels`. The Price List API
+  call goes to `api.pricing.<endpoint-region>.amazonaws.com`; corporate proxies (observed with Zscaler)
+  may block this host, in which case pricing falls back to YAML as above.
+  Dependencies `software.amazon.awssdk:pricing` and `software.amazon.awssdk:bedrock` are required on the
+  classpath — `spring-ai-insights-bedrock` brings them in.
+- **List prices only.** The Price List API returns public on-demand prices, not negotiated/EDP/private-offer
+  discounts; it does not represent invoiced amounts. Batch, provisioned throughput / reserved TPM, and
+  1-hour / 30-minute cache writes are not priced by this feature.
+- **Long-context tiers are ignored.** Models with a separate long-context price tier (e.g. very long
+  prompts) always use the standard price, so **cost on very long prompts on those models is understated**.
+- **Application inference profile ARNs** (`arn:aws:bedrock:…:application-inference-profile/…`) are not
+  priced by AWS pricing; price them with `ai-insights.pricing.models` as before.
+- **A custom `PriceCatalog` bean wins over everything.** If you define your own `PriceCatalog` bean,
+  `ai-insights.pricing.aws` is not applied, and a startup info log says so.
+- `ai-insights.pricing.aws.enabled=true` fails startup if `ai-insights.pricing.currency` is not `USD`, or
+  if `spring-ai-insights-bedrock` or its AWS SDK `pricing`/`bedrock` jars are missing (unless you define
+  your own `PriceCatalog` bean).
 
 ## Storage
 
@@ -450,6 +506,10 @@ Ratings appear on the Quality page, next to each turn of a conversation, and in 
 | `ai-insights.knowledge.bedrock.refresh` | `1h` | how often the document list is refreshed (≥ 1m) |
 | `ai-insights.pricing.currency` | `USD` | |
 | `ai-insights.pricing.models[]` | – | `model`, `input`, `output`, `cache-read`, `cache-write`, `input-includes-cached` |
+| `ai-insights.pricing.aws.enabled` | `false` | price Amazon Bedrock models from the AWS Price List API |
+| `ai-insights.pricing.aws.region` | `spring.ai.bedrock.aws.region`, else SDK default | Bedrock region to price |
+| `ai-insights.pricing.aws.endpoint-region` | `us-east-1` | Price List API endpoint region (`us-east-1`, `eu-central-1` or `ap-south-1`) |
+| `ai-insights.pricing.aws.refresh` | `24h` | how often Bedrock list prices are refreshed (≥ 1h) |
 | `ai-insights.metrics.tenant-tag` | `false` | tag `ai.insights.cost` with tenant (only for a few tenants) |
 | `ai-insights.writer.queue-capacity` | `10000` | turns waiting to be stored; overflow is dropped and counted |
 | `ai-insights.memory.max-turns` | `10000` | in-memory store size; oldest evicted first |

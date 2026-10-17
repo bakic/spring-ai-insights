@@ -1,4 +1,5 @@
 io.github.springaiinsights.autoconfigure.InsightsMongoAutoConfiguration
+io.github.springaiinsights.autoconfigure.InsightsBedrockPricingAutoConfiguration
 io.github.springaiinsights.autoconfigure.InsightsAutoConfiguration
 io.github.springaiinsights.autoconfigure.InsightsFeedbackAutoConfiguration
 io.github.springaiinsights.autoconfigure.InsightsWebAutoConfiguration
