@@ -1,6 +1,5 @@
 package io.github.springaiinsights.autoconfigure;
 
-import java.time.Duration;
 import java.util.function.Supplier;
 
 import io.github.springaiinsights.bedrock.pricing.AwsPriceCatalog;
@@ -71,6 +70,9 @@ public class InsightsBedrockPricingAutoConfiguration implements DisposableBean {
     }
 
     private synchronized PricingClient ownPricingClient(String endpointRegion) {
+        if (ownPricingClient != null) {
+            return ownPricingClient;
+        }
         PricingClientBuilder builder = PricingClient.builder();
         if (StringUtils.hasText(endpointRegion)) {
             builder.region(Region.of(endpointRegion));
@@ -80,6 +82,9 @@ public class InsightsBedrockPricingAutoConfiguration implements DisposableBean {
     }
 
     private synchronized BedrockClient ownBedrockClient(String region) {
+        if (ownBedrockClient != null) {
+            return ownBedrockClient;
+        }
         BedrockClientBuilder builder = BedrockClient.builder();
         if (StringUtils.hasText(region)) {
             builder.region(Region.of(region));

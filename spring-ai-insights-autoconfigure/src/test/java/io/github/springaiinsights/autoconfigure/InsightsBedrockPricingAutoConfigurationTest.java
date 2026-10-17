@@ -1,5 +1,6 @@
 package io.github.springaiinsights.autoconfigure;
 
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 
 import io.github.springaiinsights.bedrock.pricing.AwsPriceCatalog;
@@ -132,6 +133,31 @@ class InsightsBedrockPricingAutoConfigurationTest {
                 ModelPrice price = catalog.find("eu.anthropic.claude-sonnet-4-6").orElseThrow();
                 assertThat(price.input()).isEqualByComparingTo(BigDecimal.valueOf(3.00));
             });
+    }
+
+    /** The suppliers passed to AwsPriceCatalog are called on every refresh; the own client built on the first
+     * call must be reused (and only closed once, in destroy()), not rebuilt and leaked on every refresh. */
+    @Test
+    void ownClientsAreReusedAcrossCalls() throws Exception {
+        InsightsBedrockPricingAutoConfiguration autoConfiguration = new InsightsBedrockPricingAutoConfiguration();
+        try {
+            Method ownPricingClient = InsightsBedrockPricingAutoConfiguration.class
+                .getDeclaredMethod("ownPricingClient", String.class);
+            ownPricingClient.setAccessible(true);
+            PricingClient firstPricing = (PricingClient) ownPricingClient.invoke(autoConfiguration, "us-east-1");
+            PricingClient secondPricing = (PricingClient) ownPricingClient.invoke(autoConfiguration, "us-east-1");
+            assertThat(firstPricing).isSameAs(secondPricing);
+
+            Method ownBedrockClient = InsightsBedrockPricingAutoConfiguration.class
+                .getDeclaredMethod("ownBedrockClient", String.class);
+            ownBedrockClient.setAccessible(true);
+            BedrockClient firstBedrock = (BedrockClient) ownBedrockClient.invoke(autoConfiguration, "eu-west-1");
+            BedrockClient secondBedrock = (BedrockClient) ownBedrockClient.invoke(autoConfiguration, "eu-west-1");
+            assertThat(firstBedrock).isSameAs(secondBedrock);
+        }
+        finally {
+            autoConfiguration.destroy();
+        }
     }
 
     @Test
