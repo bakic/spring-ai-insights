@@ -272,7 +272,7 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
                     r.fillUnreportedUsage(value(seenUsage.getPromptTokens()), value(seenUsage.getCompletionTokens()),
                             value(seenUsage.getCacheReadInputTokens()), value(seenUsage.getCacheWriteInputTokens()));
                 }
-                addUncorrelatedUsage(r, last);
+                addUncorrelatedUsage(r, request, last);
             }, turn -> {
                 cancel(timeout.getAndSet(DONE));
                 publish(turn);
@@ -304,8 +304,11 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
         }
     }
 
-    /** Without correlated model observations (e.g. a NOOP registry) the response usage is the only source. */
-    private static void addUncorrelatedUsage(TurnRecorder recorder, @Nullable ChatResponse last) {
+    /** Without correlated model observations (e.g. a NOOP registry) the response usage is the only source.
+     * Some providers (e.g. Bedrock Converse) report no model in the response, so the request's model is the
+     * fallback. */
+    private static void addUncorrelatedUsage(TurnRecorder recorder, ChatClientRequest request,
+            @Nullable ChatResponse last) {
         if (recorder.hasModelCalls() || last == null || last.getMetadata() == null) {
             return;
         }
@@ -315,6 +318,9 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
             return;
         }
         String model = metadata.getModel();
+        if (model == null || model.isBlank()) {
+            model = request.prompt().getOptions() == null ? null : request.prompt().getOptions().getModel();
+        }
         recorder.addModelCall(UNKNOWN, model == null || model.isBlank() ? UNKNOWN : model, usage.getPromptTokens(),
                 usage.getCompletionTokens(), usage.getCacheReadInputTokens(), usage.getCacheWriteInputTokens(), 0,
                 null);

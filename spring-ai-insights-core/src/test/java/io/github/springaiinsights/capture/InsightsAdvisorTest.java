@@ -19,6 +19,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import reactor.core.publisher.Flux;
 import reactor.test.StepVerifier;
 
 import org.springframework.ai.chat.client.ChatClient;
@@ -28,7 +29,12 @@ import org.springframework.ai.chat.client.advisor.DefaultAroundAdvisorChain;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
 import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.metadata.ChatResponseMetadata;
+import org.springframework.ai.chat.metadata.DefaultUsage;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
@@ -411,6 +417,47 @@ class InsightsAdvisorTest {
             assertThat(mc.provider()).isEqualTo("unknown");
             assertThat(mc.inputTokens()).isEqualTo(40);
         });
+    }
+
+    /** Like Spring AI's Bedrock Converse model: usage in the response metadata, but no model name. */
+    private static ChatModel modelWithoutResponseModel() {
+        return new ChatModel() {
+            @Override
+            public ChatResponse call(Prompt prompt) {
+                return new ChatResponse(List.of(new Generation(new AssistantMessage("x"))),
+                        ChatResponseMetadata.builder().usage(new DefaultUsage(40, 4)).build());
+            }
+
+            @Override
+            public Flux<ChatResponse> stream(Prompt prompt) {
+                return Flux.just(call(prompt));
+            }
+        };
+    }
+
+    @Test
+    void uncorrelatedCallFallsBackToRequestModel() {
+        var plain = ChatClient.builder(modelWithoutResponseModel()).defaultAdvisors(advisor()).build();
+        plain.prompt()
+            .options(ToolCallingChatOptions.builder().model("eu.anthropic.claude-sonnet-4-6"))
+            .user("hi")
+            .call()
+            .content();
+        assertThat(awaitTurn().modelCalls()).singleElement()
+            .satisfies(mc -> assertThat(mc.model()).isEqualTo("eu.anthropic.claude-sonnet-4-6"));
+    }
+
+    @Test
+    void uncorrelatedStreamFallsBackToRequestModel() {
+        var plain = ChatClient.builder(modelWithoutResponseModel()).defaultAdvisors(advisor()).build();
+        plain.prompt()
+            .options(ToolCallingChatOptions.builder().model("eu.anthropic.claude-sonnet-4-6"))
+            .user("hi")
+            .stream()
+            .content()
+            .blockLast();
+        assertThat(awaitTurn().modelCalls()).singleElement()
+            .satisfies(mc -> assertThat(mc.model()).isEqualTo("eu.anthropic.claude-sonnet-4-6"));
     }
 
     @Test
