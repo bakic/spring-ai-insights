@@ -55,6 +55,9 @@ public class InsightsBedrockAutoConfiguration implements DisposableBean {
     }
 
     private synchronized BedrockAgentClient ownClient(@Nullable String region) {
+        if (ownClient != null) {
+            return ownClient;
+        }
         BedrockAgentClientBuilder builder = BedrockAgentClient.builder();
         if (region != null && !region.isBlank()) {
             builder.region(Region.of(region));

@@ -1,5 +1,7 @@
 package io.github.springaiinsights.autoconfigure;
 
+import java.lang.reflect.Method;
+
 import io.github.springaiinsights.bedrock.BedrockKnowledgeBaseCatalog;
 import io.github.springaiinsights.knowledge.KnowledgeCorpusCatalog;
 import org.junit.jupiter.api.AfterEach;
@@ -67,6 +69,21 @@ class InsightsBedrockAutoConfigurationTest {
                 assertThat(context).hasSingleBean(BedrockKnowledgeBaseCatalog.class);
                 assertThat(context).doesNotHaveBean(BedrockAgentClient.class);
             });
+    }
+
+    /** The catalog calls its client supplier on every refresh; the own client must be built once, not leaked. */
+    @Test
+    void ownClientIsReusedAcrossCalls() throws Exception {
+        InsightsBedrockAutoConfiguration autoConfiguration = new InsightsBedrockAutoConfiguration();
+        try {
+            Method ownClient = InsightsBedrockAutoConfiguration.class.getDeclaredMethod("ownClient", String.class);
+            ownClient.setAccessible(true);
+            assertThat(ownClient.invoke(autoConfiguration, "eu-west-1"))
+                .isSameAs(ownClient.invoke(autoConfiguration, "eu-west-1"));
+        }
+        finally {
+            autoConfiguration.destroy();
+        }
     }
 
     @Test
