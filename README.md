@@ -433,6 +433,9 @@ ai-insights:
   `ReportLock` on it or declare a `ReportLock` bean.
 - The week is the seven calendar days before the run, in `zone`. Each application sends its own
   report, covering all tenants. A failing channel never stops the other one, nor the application.
+- **Never throws**: if building the report or sending it fails, it's logged and skipped — there's
+  no retry before next week's run. The week's claim is held for 35 days, so a late restart within
+  that window won't resend an already-sent week.
 - Read it any time, behind the dashboard's access check: `GET {path}/report` (HTML) and
   `GET {path}/api/report` (JSON); add `?app=` for another application.
 
