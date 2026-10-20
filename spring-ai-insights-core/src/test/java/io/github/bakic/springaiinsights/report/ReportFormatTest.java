@@ -99,7 +99,8 @@ class ReportFormatTest {
             .doesNotContain("<b>");
         String html = ReportFormat.html(report);
         assertThat(html).contains("<li>&lt;b&gt;&amp;&quot;x&quot; (2 calls): configured &lt;i&gt; is not the same name</li>")
-            .contains("<li>Configured now: &lt;i&gt;</li>")
+            .contains("</ul>\n<p style=\"color:#59636e;margin:4px 0 0\">Configured now: &lt;i&gt;</p>")
+            .doesNotContain("<li>Configured now")
             .doesNotContain("<b>&")
             .doesNotContain("<i>");
     }

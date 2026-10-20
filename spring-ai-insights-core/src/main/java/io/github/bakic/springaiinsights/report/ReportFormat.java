@@ -105,10 +105,12 @@ public final class ReportFormat {
         if (!pricing.isEmpty()) {
             html.append("<p style=\"color:#b42318;margin:8px 0 0\">").append(pricing.get(0)).append("</p>\n")
                 .append("<ul style=\"color:#59636e;margin:4px 0 0;padding-left:20px\">\n");
-            for (String line : pricing.subList(1, pricing.size())) {
-                html.append("<li>").append(line.startsWith("- ") ? line.substring(2) : line).append("</li>\n");
+            for (String line : pricing.subList(1, pricing.size() - 1)) {
+                html.append("<li>").append(line.substring(2)).append("</li>\n");
             }
-            html.append("</ul>\n");
+            html.append("</ul>\n<p style=\"color:#59636e;margin:4px 0 0\">")
+                .append(pricing.get(pricing.size() - 1))
+                .append("</p>\n");
         }
         if (report.dashboardUrl() != null) {
             html.append("<p style=\"margin:16px 0 0\"><a style=\"color:#0969da\" href=\"")

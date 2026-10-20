@@ -492,9 +492,9 @@
     }
     const configured = data.configuredModels || [];
     return el('section', { class: 'pricing-notice', role: 'alert', 'aria-label': 'Models without a price' },
-      el('h2', { text: `${plural(missing.length, 'model has', 'models have')} no price, so their cost is missing` }),
+      el('h2', { text: `${plural(missing.length, 'model has', 'models have')} no price, so ${missing.length === 1 ? 'its' : 'their'} cost is missing` }),
       el('p', null, 'Prices are matched on the exact model name, as the provider reports it. Update ',
-        el('code', { text: 'ai-insights.pricing.models' }), ' so that each name below is listed exactly as written.'),
+        el('code', { class: 'key', text: 'ai-insights.pricing.models' }), ' so that each name below is listed exactly as written.'),
       el('ul', null, missing.map((m) => el('li', null,
         el('code', { text: m.model }), ` used in ${plural(m.calls, 'call', 'calls')}`,
         m.similar
