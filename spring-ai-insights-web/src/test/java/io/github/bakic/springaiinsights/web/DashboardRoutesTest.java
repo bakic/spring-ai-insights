@@ -124,6 +124,7 @@ class DashboardRoutesTest {
             .andExpect(jsonPath("$.recentNegative[0].comment").value("too long"));
         mvc.perform(get("/ai-insights/api/conversation?app=help&id=h1"))
             .andExpect(jsonPath("$.turns.length()").value(2))
+            .andExpect(jsonPath("$.totalTurns").value(2))
             .andExpect(jsonPath("$.feedback.length()").value(2));
     }
 

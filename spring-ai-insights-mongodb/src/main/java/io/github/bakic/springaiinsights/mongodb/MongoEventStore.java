@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
@@ -398,10 +399,18 @@ public final class MongoEventStore implements InsightsEventStore, FeedbackStore,
 
     @Override
     public List<ConversationTurn> conversation(String application, String conversationId) {
-        return read(turns()
+        List<ConversationTurn> latest = read(turns()
             .find(Filters.and(Filters.eq("application", application), Filters.eq("conversationId", conversationId)))
-            .sort(Sorts.ascending("startedAt"))
+            .sort(Sorts.orderBy(Sorts.descending("startedAt"), Sorts.descending("_id")))
             .limit(MAX_CONVERSATION_TURNS));
+        Collections.reverse(latest);
+        return latest;
+    }
+
+    @Override
+    public long conversationTurns(String application, String conversationId) {
+        return turns().countDocuments(
+                Filters.and(Filters.eq("application", application), Filters.eq("conversationId", conversationId)));
     }
 
     /**

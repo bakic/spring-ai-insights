@@ -389,6 +389,26 @@ public abstract class InsightsAnalyticsContract {
     }
 
     @Test
+    void conversationTurnsCountsEveryTurn() {
+        assertThat(analytics().conversationTurns("shop", "c1")).isEqualTo(2);
+        assertThat(analytics().conversationTurns("crm", "c1")).isZero();
+    }
+
+    @Test
+    void longConversationKeepsTheLatestTurns() {
+        int total = InsightsAnalytics.MAX_CONVERSATION_TURNS + 20;
+        ContractTurns.longConversation("shop", "long", total).forEach(store()::save);
+
+        List<ConversationTurn> turns = analytics().conversation("shop", "long");
+
+        assertThat(turns).hasSize(InsightsAnalytics.MAX_CONVERSATION_TURNS);
+        assertThat(turns.get(0).turnId()).isEqualTo(String.format("L%04d", 20));
+        assertThat(turns.get(turns.size() - 1).turnId()).isEqualTo(String.format("L%04d", total - 1));
+        assertThat(turns).extracting(ConversationTurn::startedAt).isSorted();
+        assertThat(analytics().conversationTurns("shop", "long")).isEqualTo(total);
+    }
+
+    @Test
     void applicationsSorted() {
         assertThat(analytics().applications()).containsExactly("crm", "help", "shop");
     }

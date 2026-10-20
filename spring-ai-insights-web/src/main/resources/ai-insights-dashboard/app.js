@@ -773,10 +773,20 @@
       ];
     }
     const feedback = new Map(data.feedback.map((f) => [f.turnId, f]));
+    // A conversation too long to show comes as its latest turns; the cards are numbered within the whole.
+    const total = Math.max(data.totalTurns || 0, data.turns.length);
+    const hidden = total - data.turns.length;
+    const subtitle = hidden > 0
+      ? `Showing the latest ${plural(data.turns.length, 'turn', 'turns')} of ${count(total)} in ${app}, oldest first.`
+      : `${plural(data.turns.length, 'turn', 'turns')} in ${app}, oldest first.`;
     return [
-      pageHead('Conversation', `${plural(data.turns.length, 'turn', 'turns')} in ${app}, oldest first.`, back),
+      pageHead('Conversation', subtitle, back),
+      hidden > 0
+        ? el('p', { class: 'warn', role: 'status',
+          text: `The ${plural(hidden, 'earlier turn is', 'earlier turns are')} not shown. The figures below cover the turns shown.` })
+        : null,
       conversationSummary(app, id, data.turns, data.feedback),
-      el('ol', { class: 'turns' }, data.turns.map((t, k) => turnCard(t, k + 1, data.turns.length, feedback.get(t.turnId))))
+      el('ol', { class: 'turns' }, data.turns.map((t, k) => turnCard(t, hidden + k + 1, total, feedback.get(t.turnId))))
     ];
   }
 

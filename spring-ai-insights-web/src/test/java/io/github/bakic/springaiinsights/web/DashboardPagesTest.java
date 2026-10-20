@@ -14,6 +14,7 @@ import java.util.stream.IntStream;
 import io.github.bakic.springaiinsights.analytics.ContractTurns;
 import io.github.bakic.springaiinsights.analytics.AbandonedConversation;
 import io.github.bakic.springaiinsights.analytics.DocumentUsage;
+import io.github.bakic.springaiinsights.analytics.InsightsAnalytics;
 import io.github.bakic.springaiinsights.analytics.InsightsFilter;
 import io.github.bakic.springaiinsights.analytics.TenantUsage;
 import io.github.bakic.springaiinsights.feedback.Feedback;
@@ -294,6 +295,21 @@ class DashboardPagesTest {
 
         assertThat(page.turns()).extracting(ConversationTurn::turnId).containsExactly("H1", "H2");
         assertThat(page.feedback()).extracting(Feedback::turnId).containsExactly("H1", "H2");
+        assertThat(page.totalTurns()).isEqualTo(2);
+    }
+
+    @Test
+    void longConversationShowsTheLatestTurnsAndTheTotal() {
+        int total = InsightsAnalytics.MAX_CONVERSATION_TURNS + 7;
+        InMemoryEventStore big = new InMemoryEventStore(total + 10);
+        ContractTurns.longConversation("shop", "long", total).forEach(big::save);
+
+        var page = new DashboardPages(big, big, "shop", "USD", Clock.systemUTC()).conversation("shop", "long");
+
+        assertThat(page.turns()).hasSize(InsightsAnalytics.MAX_CONVERSATION_TURNS);
+        assertThat(page.turns().get(0).turnId()).isEqualTo("L0007");
+        assertThat(page.turns().get(page.turns().size() - 1).turnId()).isEqualTo(String.format("L%04d", total - 1));
+        assertThat(page.totalTurns()).isEqualTo(total);
     }
 
     @Test

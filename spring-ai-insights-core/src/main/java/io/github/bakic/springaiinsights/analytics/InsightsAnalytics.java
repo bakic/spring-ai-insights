@@ -16,7 +16,7 @@ import org.jspecify.annotations.Nullable;
  */
 public interface InsightsAnalytics {
 
-    /** Maximum number of turns returned by {@link #conversation}. */
+    /** Maximum number of turns returned by {@link #conversation}: the latest ones. */
     int MAX_CONVERSATION_TURNS = 500;
 
     UsageSummary summary(InsightsFilter filter);
@@ -42,8 +42,19 @@ public interface InsightsAnalytics {
     /** Tenants with the most turns first, then by tenant ID. */
     List<TenantUsage> tenants(InsightsFilter filter);
 
-    /** The turns of one conversation, oldest first, at most {@link #MAX_CONVERSATION_TURNS}. */
+    /**
+     * The turns of one conversation, oldest first. A conversation longer than {@link #MAX_CONVERSATION_TURNS} gives
+     * its latest {@link #MAX_CONVERSATION_TURNS} turns; {@link #conversationTurns} tells how many it has in all.
+     */
     List<ConversationTurn> conversation(String application, String conversationId);
+
+    /**
+     * How many turns one conversation has in all, which is more than the size of {@link #conversation} when that is
+     * cut at {@link #MAX_CONVERSATION_TURNS}. The default cannot see past the cut; the bundled stores count them all.
+     */
+    default long conversationTurns(String application, String conversationId) {
+        return conversation(application, conversationId).size();
+    }
 
     /**
      * Users active in the filter whose first turn ever, for the same application and tenant, is inside the range.

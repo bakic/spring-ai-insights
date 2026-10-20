@@ -118,6 +118,16 @@ public final class ContractTurns {
                 rating, comment, Instant.parse(createdAt));
     }
 
+    /** {@code count} turns of one conversation, one second apart, numbered {@code L0000} onwards. */
+    public static List<ConversationTurn> longConversation(String app, String conversation, int count) {
+        Instant start = Instant.parse("2026-10-01T00:00:00Z");
+        return java.util.stream.IntStream.range(0, count)
+            .mapToObj(i -> turn(String.format("L%04d", i), app, start.plusSeconds(i).toString(), conversation, "u1",
+                    "acme", TurnOutcome.SUCCESS, null, 800, null, List.of(call("m1", 10, 5, 0, "0.00001")),
+                    List.of(), List.of()))
+            .toList();
+    }
+
     private static ConversationTurn turn(String id, String app, String startedAt, String conversation, String user,
             String tenant, TurnOutcome outcome, String errorType, List<String> finishReasons,
             List<RetrievalRecord> retrievals) {

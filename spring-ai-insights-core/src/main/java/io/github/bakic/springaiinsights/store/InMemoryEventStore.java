@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -254,11 +255,20 @@ public final class InMemoryEventStore implements InsightsEventStore, FeedbackSto
 
     @Override
     public List<ConversationTurn> conversation(String application, String conversationId) {
+        List<ConversationTurn> latest = new ArrayList<>(turns.values().stream()
+            .filter(t -> t.application().equals(application) && t.conversationId().equals(conversationId))
+            .sorted(Comparator.comparing(ConversationTurn::startedAt).reversed())
+            .limit(MAX_CONVERSATION_TURNS)
+            .toList());
+        Collections.reverse(latest);
+        return latest;
+    }
+
+    @Override
+    public long conversationTurns(String application, String conversationId) {
         return turns.values().stream()
             .filter(t -> t.application().equals(application) && t.conversationId().equals(conversationId))
-            .sorted(Comparator.comparing(ConversationTurn::startedAt))
-            .limit(MAX_CONVERSATION_TURNS)
-            .toList();
+            .count();
     }
 
     @Override

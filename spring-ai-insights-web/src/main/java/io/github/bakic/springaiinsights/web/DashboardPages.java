@@ -21,6 +21,7 @@ import io.github.bakic.springaiinsights.analytics.ToolUsage;
 import io.github.bakic.springaiinsights.analytics.UsageSummary;
 import io.github.bakic.springaiinsights.feedback.Rating;
 import io.github.bakic.springaiinsights.knowledge.KnowledgeCorpusCatalog;
+import io.github.bakic.springaiinsights.model.ConversationTurn;
 import io.github.bakic.springaiinsights.store.InMemoryEventStore;
 import io.github.bakic.springaiinsights.store.InsightsEventStore;
 import io.github.bakic.springaiinsights.store.TurnQuery;
@@ -182,8 +183,9 @@ public final class DashboardPages {
     }
 
     public ConversationPage conversation(String application, String conversationId) {
-        return new ConversationPage(analytics.conversation(application, conversationId),
-                analytics.conversationFeedback(application, conversationId));
+        List<ConversationTurn> turns = analytics.conversation(application, conversationId);
+        long total = Math.max(turns.size(), analytics.conversationTurns(application, conversationId));
+        return new ConversationPage(turns, analytics.conversationFeedback(application, conversationId), total);
     }
 
     private List<CorpusCoverage> coverage(InsightsFilter filter) {
