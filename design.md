@@ -45,9 +45,12 @@ open source (clean-room, no client code, names or data).
 
 - Evaluating answer correctness / LLM-as-judge (that is project #2 `junit-llm-evals`).
 - Semantic analysis of message content (intent clustering, rephrase detection) — v0.2+.
-- Instrumenting AI calls made outside Spring AI (e.g. raw Bedrock `RetrieveAndGenerate` SDK calls).
-- Fetching live provider prices.
 - Being a general APM or replacing the user's observability backend.
+
+> Two earlier non-goals shipped during implementation and are no longer true: instrumenting
+> Bedrock Knowledge Base calls made outside Spring AI, and fetching live provider prices. See
+> README's "Amazon Bedrock Knowledge Base retrieval" and "Automatic Amazon Bedrock pricing"
+> sections.
 
 ## 5. Anti-goals — failure even if it "works"
 
@@ -190,11 +193,11 @@ Served by the app itself; no Node or extra build step for consumers. Pages:
 **Tools** · **Quality** · **Conversation detail** (one turn timeline: model calls, tools,
 retrievals, cost; links to the trace ID if tracing is on). Period selector and tenant filter.
 
-Access: with Spring Security, the starter contributes its own `SecurityFilterChain` scoped to
-the dashboard path (ordered before the app's chains, overridable by defining a bean) and requires
-a configurable role (default `AI_INSIGHTS`). Without Spring Security, the dashboard is disabled
-unless `dashboard.allow-anonymous=true` is set — the quickstart sets it for local use. Goal 7
-therefore reads: *dependency + one property → dashboard*.
+Access: the dashboard does **not** add its own `SecurityFilterChain`. It relies entirely on the
+application's own authentication (form login, OAuth2, JWT resource server, …) and requires a
+configurable role (default `AI_INSIGHTS`, checked with `request.isUserInRole`). Without Spring
+Security, the dashboard is disabled unless `dashboard.allow-anonymous=true` is set — the
+quickstart sets it for local use. Goal 7 therefore reads: *dependency + one property → dashboard*.
 
 Tenant filter is a convenience filter: in v0.1 all dashboard readers are internal and see all
 tenants. Per-tenant access restriction is out of scope for v0.1. The filter suggests the tenants
@@ -207,9 +210,11 @@ any other tenant can still be typed.
 thumbs up/down for a `turnId`. The turn ID is exposed to the app (response metadata / advisor
 context) so it can be returned to the front end.
 
-The feedback endpoint is **separate from the dashboard's protection**: any authenticated chat
-user may call it, but only for turns whose `userId` matches the caller's resolved identity
-(otherwise 404). One rating per turn; a new rating replaces the previous one.
+The feedback endpoint is registered under the dashboard path, so it is protected by whatever
+security the application (or `dashboard.allow-anonymous`) applies to that route — there is no
+separate protection layer. The caller must resolve to a `userId`, and a rating is only accepted
+for a turn whose `userId` matches the caller's resolved identity (otherwise 404). One rating per
+turn; a new rating replaces the previous one.
 
 ### 8.9 Weekly report
 

@@ -1,7 +1,7 @@
 # Sending Spring AI Insights to an observability backend
 
-spring-ai-insights keeps the full record of every conversation in your own store (MongoDB or JDBC)
-and serves it through the built-in dashboard. On top of that, it publishes **Micrometer metrics**
+spring-ai-insights keeps the full record of every conversation in your own store (in-memory or
+MongoDB) and serves it through the built-in dashboard. On top of that, it publishes **Micrometer metrics**
 that any monitoring backend can collect. Spring AI itself publishes **traces** for every model call.
 This guide shows how to send both to the tools you already use.
 
