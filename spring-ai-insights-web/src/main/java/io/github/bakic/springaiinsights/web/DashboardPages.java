@@ -8,7 +8,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
@@ -24,6 +23,7 @@ import io.github.bakic.springaiinsights.analytics.UsageSummary;
 import io.github.bakic.springaiinsights.feedback.Rating;
 import io.github.bakic.springaiinsights.knowledge.KnowledgeCorpusCatalog;
 import io.github.bakic.springaiinsights.model.ConversationTurn;
+import io.github.bakic.springaiinsights.pricing.UnpricedModel;
 import io.github.bakic.springaiinsights.store.InMemoryEventStore;
 import io.github.bakic.springaiinsights.store.InsightsEventStore;
 import io.github.bakic.springaiinsights.store.TurnQuery;
@@ -37,7 +37,6 @@ import io.github.bakic.springaiinsights.web.pages.QualityPage;
 import io.github.bakic.springaiinsights.web.pages.TenantsPage;
 import io.github.bakic.springaiinsights.web.pages.ToolsPage;
 import io.github.bakic.springaiinsights.web.pages.TurnRow;
-import io.github.bakic.springaiinsights.web.pages.UnpricedModel;
 import io.github.bakic.springaiinsights.web.pages.UsagePage;
 import org.jspecify.annotations.Nullable;
 
@@ -160,29 +159,9 @@ public final class DashboardPages {
         List<ModelUsage> models = analytics.models(filter);
         return new CostPage(currency, summary.cost(), perConversation, monthToDate, projection,
                 summary.unpricedTurns(), analytics.timeline(filter, Granularity.DAY), models,
-                analytics.tenants(filter), analytics.topUsers(filter, COST_TOP_USERS), unpriced(models),
+                analytics.tenants(filter), analytics.topUsers(filter, COST_TOP_USERS),
+                UnpricedModel.of(models, options.configuredModels()),
                 options.configuredModels());
-    }
-
-    private List<UnpricedModel> unpriced(List<ModelUsage> models) {
-        return models.stream()
-            .filter(model -> model.unpricedCalls() > 0)
-            .map(model -> new UnpricedModel(model.model(), model.unpricedCalls(),
-                    similarConfigured(model.model(), options.configuredModels())))
-            .toList();
-    }
-
-    /** The longest configured model whose name contains, or is contained in, the reported one (ignoring case). */
-    static @Nullable String similarConfigured(String reported, List<String> configured) {
-        String lower = reported.toLowerCase(Locale.ROOT);
-        String best = null;
-        for (String candidate : configured) {
-            String other = candidate.toLowerCase(Locale.ROOT);
-            if ((lower.contains(other) || other.contains(lower)) && (best == null || candidate.length() > best.length())) {
-                best = candidate;
-            }
-        }
-        return best;
     }
 
     public KnowledgePage knowledge(InsightsFilter filter) {

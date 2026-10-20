@@ -14,6 +14,7 @@ import java.util.List;
 import io.github.bakic.springaiinsights.analytics.InsightsAnalytics;
 import io.github.bakic.springaiinsights.analytics.InsightsFilter;
 import io.github.bakic.springaiinsights.analytics.ToolUsage;
+import io.github.bakic.springaiinsights.pricing.UnpricedModel;
 import org.jspecify.annotations.Nullable;
 
 /** Builds weekly reports. A week is 7 calendar days in the report's zone, so DST weeks stay 7 days. */
@@ -32,8 +33,17 @@ public final class WeeklyReports {
 
     private final @Nullable URI dashboardUrl;
 
+    private final List<String> configuredModels;
+
     public WeeklyReports(InsightsAnalytics analytics, String currency, ZoneId zone, Clock clock,
             @Nullable URI dashboardUrl) {
+        this(analytics, currency, zone, clock, dashboardUrl, List.of());
+    }
+
+    /** @param configuredModels the models that have a configured price, listed next to a model that has none */
+    public WeeklyReports(InsightsAnalytics analytics, String currency, ZoneId zone, Clock clock,
+            @Nullable URI dashboardUrl, List<String> configuredModels) {
+        this.configuredModels = List.copyOf(configuredModels);
         this.analytics = analytics;
         this.currency = currency;
         this.zone = zone;
@@ -60,8 +70,11 @@ public final class WeeklyReports {
         InsightsFilter week = filter(application, firstDay, end);
         InsightsFilter previous = filter(application, firstDay.minusDays(7), firstDay);
         List<ToolUsage> tools = analytics.tools(week);
-        return new WeeklyReport(application, currency, firstDay, end.minusDays(1), figures(week), figures(previous),
-                tools.subList(0, Math.min(TOP_TOOLS, tools.size())), projection(application, end), dashboardUrl);
+        ReportFigures current = figures(week);
+        return new WeeklyReport(application, currency, firstDay, end.minusDays(1), current, figures(previous),
+                tools.subList(0, Math.min(TOP_TOOLS, tools.size())), projection(application, end), dashboardUrl,
+                current.unpricedTurns() == 0 ? List.of() : UnpricedModel.of(analytics.models(week), configuredModels),
+                configuredModels);
     }
 
     private ReportFigures figures(InsightsFilter filter) {

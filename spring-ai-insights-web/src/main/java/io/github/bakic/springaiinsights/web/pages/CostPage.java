@@ -7,6 +7,7 @@ import io.github.bakic.springaiinsights.analytics.ModelUsage;
 import io.github.bakic.springaiinsights.analytics.TenantUsage;
 import io.github.bakic.springaiinsights.analytics.TimeBucket;
 import io.github.bakic.springaiinsights.analytics.UserUsage;
+import io.github.bakic.springaiinsights.pricing.UnpricedModel;
 import org.jspecify.annotations.Nullable;
 
 /**

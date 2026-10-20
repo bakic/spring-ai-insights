@@ -20,6 +20,7 @@ import io.github.bakic.springaiinsights.analytics.TenantUsage;
 import io.github.bakic.springaiinsights.feedback.Feedback;
 import io.github.bakic.springaiinsights.knowledge.KnowledgeCorpusCatalog;
 import io.github.bakic.springaiinsights.model.ConversationTurn;
+import io.github.bakic.springaiinsights.pricing.UnpricedModel;
 import io.github.bakic.springaiinsights.store.InMemoryEventStore;
 import io.github.bakic.springaiinsights.store.InsightsEventStore;
 import io.github.bakic.springaiinsights.store.TurnQuery;
@@ -31,7 +32,6 @@ import io.github.bakic.springaiinsights.web.pages.OverviewPage;
 import io.github.bakic.springaiinsights.web.pages.QualityPage;
 import io.github.bakic.springaiinsights.web.pages.TenantsPage;
 import io.github.bakic.springaiinsights.web.pages.TurnRow;
-import io.github.bakic.springaiinsights.web.pages.UnpricedModel;
 import io.github.bakic.springaiinsights.web.pages.UsagePage;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -326,16 +326,6 @@ class DashboardPagesTest {
         assertThat(cost.unpricedModels()).extracting(UnpricedModel::model, UnpricedModel::calls)
             .containsExactly(tuple("m2", 2L));
         assertThat(cost.unpricedModels().get(0).similar()).isNull();
-    }
-
-    @Test
-    void similarConfiguredModelIsTheLongestOneContainingOrContainedInTheReportedName() {
-        List<String> configured = List.of("gpt-4o", "gpt-4o-mini", "claude");
-        assertThat(DashboardPages.similarConfigured("gpt-4o-mini-2024-07-18", configured)).isEqualTo("gpt-4o-mini");
-        assertThat(DashboardPages.similarConfigured("GPT-4O-2024", configured)).isEqualTo("gpt-4o");
-        assertThat(DashboardPages.similarConfigured("gpt", configured)).isEqualTo("gpt-4o-mini");
-        assertThat(DashboardPages.similarConfigured("llama", configured)).isNull();
-        assertThat(DashboardPages.similarConfigured("llama", List.of())).isNull();
     }
 
     @Test

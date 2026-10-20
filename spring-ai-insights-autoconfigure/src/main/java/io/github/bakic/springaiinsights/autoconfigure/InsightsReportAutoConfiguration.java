@@ -56,7 +56,7 @@ public class InsightsReportAutoConfiguration {
             InsightsProperties properties) {
         InsightsProperties.Report report = properties.getReport();
         return new WeeklyReports(analytics, prices.currency(), zone(report), Clock.systemUTC(),
-                report.getDashboardUrl());
+                report.getDashboardUrl(), prices.configuredModels());
     }
 
     @Bean

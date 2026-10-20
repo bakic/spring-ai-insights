@@ -101,7 +101,8 @@ warning at startup when it finds 2.0.0.
    these prices.
 
    Models without a price are still recorded, with a `null` cost, one log warning, the `ai.insights.unpriced.models`
-   counter, a warning on the dashboard, and a note in the weekly report.
+   counter, a warning on the dashboard, and, in the weekly report, a note that names the models and the
+   configured entries.
 
 4. Use the auto-configured `ChatClient.Builder` as usual. The advisor is added for you:
 

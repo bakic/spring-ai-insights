@@ -7,6 +7,7 @@ import java.time.YearMonth;
 import java.util.List;
 
 import io.github.bakic.springaiinsights.analytics.ToolUsage;
+import io.github.bakic.springaiinsights.pricing.UnpricedModel;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -62,6 +63,52 @@ class ReportFormatTest {
             .startsWith("*AI assistant weekly report: helpdesk, 12 Oct – 18 Oct 2026*\n")
             .contains("\n_Cost excludes 3 turns with unpriced models._\n")
             .endsWith("<https://example.com/ai-insights/|Open the dashboard>\n");
+    }
+
+    private static WeeklyReport withUnpricedModels(List<UnpricedModel> unpriced, List<String> configured) {
+        return new WeeklyReport("helpdesk", "USD", LocalDate.parse("2026-10-12"), LocalDate.parse("2026-10-18"),
+                CURRENT, PREVIOUS, List.of(), PROJECTION, null, unpriced, configured);
+    }
+
+    @Test
+    void textNamesTheUnpricedModelsAndWhatIsConfigured() {
+        WeeklyReport report = withUnpricedModels(
+                List.of(new UnpricedModel("gpt-4o-mini-2024-07-18", 120, "gpt-4o-mini"),
+                        new UnpricedModel("llama", 1, null)),
+                List.of("gpt-4o", "gpt-4o-mini"));
+        assertThat(ReportFormat.text(report)).contains("""
+                Cost excludes 3 turns with unpriced models.
+                Prices match the exact model name the provider reports; update ai-insights.pricing.models to price these models:
+                - gpt-4o-mini-2024-07-18 (120 calls): configured gpt-4o-mini is not the same name
+                - llama (1 call): no similar name is configured
+                Configured now: gpt-4o, gpt-4o-mini
+                """);
+    }
+
+    @Test
+    void textSaysWhenNoModelIsConfigured() {
+        WeeklyReport report = withUnpricedModels(List.of(new UnpricedModel("llama", 2, null)), List.of());
+        assertThat(ReportFormat.text(report)).contains("- llama (2 calls): no similar name is configured\n")
+            .contains("No model is configured.\n");
+    }
+
+    @Test
+    void slackAndHtmlEscapeTheModelNames() {
+        WeeklyReport report = withUnpricedModels(List.of(new UnpricedModel("<b>&\"x\"", 2, "<i>")), List.of("<i>"));
+        assertThat(ReportFormat.slack(report)).contains("&lt;b&gt;&amp;\"x\" (2 calls): configured &lt;i&gt;")
+            .doesNotContain("<b>");
+        String html = ReportFormat.html(report);
+        assertThat(html).contains("<li>&lt;b&gt;&amp;&quot;x&quot; (2 calls): configured &lt;i&gt; is not the same name</li>")
+            .contains("<li>Configured now: &lt;i&gt;</li>")
+            .doesNotContain("<b>&")
+            .doesNotContain("<i>");
+    }
+
+    @Test
+    void nothingAboutPricesWhenNoModelIsUnpriced() {
+        WeeklyReport report = withUnpricedModels(List.of(), List.of("gpt-4o"));
+        assertThat(ReportFormat.text(report)).doesNotContain("Configured now").doesNotContain("exact model name");
+        assertThat(ReportFormat.html(report)).doesNotContain("<ul");
     }
 
     @Test

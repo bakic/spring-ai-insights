@@ -10,6 +10,7 @@ import java.util.Locale;
 import java.util.function.UnaryOperator;
 
 import io.github.bakic.springaiinsights.analytics.ToolUsage;
+import io.github.bakic.springaiinsights.pricing.UnpricedModel;
 import org.jspecify.annotations.Nullable;
 
 /** Renders a {@link WeeklyReport} as Slack text, plain text or an HTML page. Data is escaped for each format. */
@@ -46,6 +47,9 @@ public final class ReportFormat {
         if (note != null) {
             text.append(note).append('\n');
         }
+        for (String line : pricingLines(report, UnaryOperator.identity())) {
+            text.append(line).append('\n');
+        }
         if (report.dashboardUrl() != null) {
             text.append("Open the dashboard: ").append(report.dashboardUrl()).append('\n');
         }
@@ -60,6 +64,9 @@ public final class ReportFormat {
         String note = note(report);
         if (note != null) {
             text.append('_').append(note).append("_\n");
+        }
+        for (String line : pricingLines(report, ReportFormat::slackEscape)) {
+            text.append(line).append('\n');
         }
         if (report.dashboardUrl() != null) {
             text.append('<').append(slackEscape(report.dashboardUrl().toString())).append("|Open the dashboard>\n");
@@ -93,6 +100,15 @@ public final class ReportFormat {
         String note = note(report);
         if (note != null) {
             html.append("<p style=\"color:#59636e;margin:16px 0 0\">").append(note).append("</p>\n");
+        }
+        List<String> pricing = pricingLines(report, ReportFormat::htmlEscape);
+        if (!pricing.isEmpty()) {
+            html.append("<p style=\"color:#b42318;margin:8px 0 0\">").append(pricing.get(0)).append("</p>\n")
+                .append("<ul style=\"color:#59636e;margin:4px 0 0;padding-left:20px\">\n");
+            for (String line : pricing.subList(1, pricing.size())) {
+                html.append("<li>").append(line.startsWith("- ") ? line.substring(2) : line).append("</li>\n");
+            }
+            html.append("</ul>\n");
         }
         if (report.dashboardUrl() != null) {
             html.append("<p style=\"margin:16px 0 0\"><a style=\"color:#0969da\" href=\"")
@@ -175,6 +191,29 @@ public final class ReportFormat {
             names.add(escape.apply(tool.tool()) + " (" + tool.calls() + (tool.calls() == 1 ? " call)" : " calls)"));
         }
         return String.join(", ", names);
+    }
+
+    /**
+     * Says which models have no price and why, once the report counts unpriced turns: prices match the exact model
+     * name, so each name is shown with the configured entry it resembles, then the configured entries. The first
+     * line is the instruction and the lines starting with "- " are the models.
+     */
+    private static List<String> pricingLines(WeeklyReport report, UnaryOperator<String> escape) {
+        if (report.unpricedModels().isEmpty()) {
+            return List.of();
+        }
+        List<String> lines = new ArrayList<>();
+        lines.add("Prices match the exact model name the provider reports; update ai-insights.pricing.models "
+                + "to price these models:");
+        for (UnpricedModel model : report.unpricedModels()) {
+            String cause = model.similar() == null ? "no similar name is configured"
+                    : "configured " + escape.apply(model.similar()) + " is not the same name";
+            lines.add("- " + escape.apply(model.model()) + " (" + model.calls() + (model.calls() == 1 ? " call" : " calls")
+                    + "): " + cause);
+        }
+        lines.add(report.configuredModels().isEmpty() ? "No model is configured."
+                : "Configured now: " + String.join(", ", report.configuredModels().stream().map(escape).toList()));
+        return lines;
     }
 
     private static @Nullable String note(WeeklyReport report) {

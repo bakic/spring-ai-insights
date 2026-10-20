@@ -14,9 +14,11 @@ import java.util.function.Function;
 
 import io.github.bakic.springaiinsights.analytics.InsightsAnalytics;
 import io.github.bakic.springaiinsights.analytics.InsightsFilter;
+import io.github.bakic.springaiinsights.analytics.ModelUsage;
 import io.github.bakic.springaiinsights.analytics.QualitySummary;
 import io.github.bakic.springaiinsights.analytics.ToolUsage;
 import io.github.bakic.springaiinsights.analytics.UsageSummary;
+import io.github.bakic.springaiinsights.pricing.UnpricedModel;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -154,6 +156,28 @@ class WeeklyReportsTest {
         assertThat(report.lastDay()).isEqualTo(LocalDate.parse("2026-10-31"));
         assertThat(report.projection().daysElapsed()).isEqualTo(31);
         assertThat(report.projection().projectedCost()).isEqualByComparingTo("123.45");
+    }
+
+    @Test
+    void unpricedModelsAreNamedWithTheConfiguredOnesTheyResemble() {
+        answer(f -> summary(1, 1, "1", 0, 0, 3), f -> quality(0, 0));
+        when(analytics.models(any())).thenReturn(List.of(
+                new ModelUsage("gpt-4o", 10, 0, 0, 0, 0, BigDecimal.ONE, 0),
+                new ModelUsage("gpt-4o-mini", 3, 0, 0, 0, 0, BigDecimal.ZERO, 3)));
+        WeeklyReports reports = new WeeklyReports(analytics, "USD", PARIS,
+                Clock.fixed(Instant.parse("2026-10-19T06:00:00Z"), PARIS), null, List.of("gpt-4o"));
+
+        WeeklyReport report = reports.latest("helpdesk");
+
+        assertThat(report.unpricedModels()).containsExactly(new UnpricedModel("gpt-4o-mini", 3, "gpt-4o"));
+        assertThat(report.configuredModels()).containsExactly("gpt-4o");
+    }
+
+    @Test
+    void noModelsAreListedWhenEveryTurnIsPriced() {
+        answer(f -> summary(1, 1, "1", 0, 0, 0), f -> quality(0, 0));
+        when(analytics.models(any())).thenReturn(List.of(new ModelUsage("gpt-4o", 10, 0, 0, 0, 0, BigDecimal.ONE, 0)));
+        assertThat(reports("2026-10-19T06:00:00Z").latest("helpdesk").unpricedModels()).isEmpty();
     }
 
     @Test
