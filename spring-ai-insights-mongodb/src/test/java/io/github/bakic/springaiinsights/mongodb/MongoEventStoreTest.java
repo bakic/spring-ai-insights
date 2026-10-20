@@ -126,7 +126,8 @@ class MongoEventStoreTest {
         assertThat(indexes).extracting(i -> i.get("key", Document.class))
             .contains(new Document("application", 1).append("startedAt", -1),
                     new Document("application", 1).append("conversationId", 1).append("startedAt", 1),
-                    new Document("application", 1).append("tenantId", 1).append("startedAt", -1));
+                    new Document("application", 1).append("tenantId", 1).append("startedAt", -1),
+                    new Document("application", 1).append("userId", 1).append("startedAt", 1));
         assertThat(ttl(indexes)).isEqualTo(NINETY_DAYS.toSeconds());
     }
 

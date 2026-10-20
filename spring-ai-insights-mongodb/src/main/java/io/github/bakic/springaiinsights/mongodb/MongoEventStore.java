@@ -290,23 +290,42 @@ public final class MongoEventStore implements InsightsEventStore, FeedbackStore,
             .append("turns", sum(1))
             .append("durationMs", sum("$durationMs"))
             .append("repeatedCalls", sum("$repeatedCalls"));
-        return aggregate(List.of(match(filter), new Document("$unwind", "$toolCalls"), new Document("$group", perTurn),
-                new Document("$group", perTool), new Document("$sort", new Document("calls", -1).append("_id", 1))))
-            .stream()
+        List<Document> usage = aggregate(List.of(match(filter), new Document("$unwind", "$toolCalls"),
+                new Document("$group", perTurn), new Document("$group", perTool),
+                new Document("$sort", new Document("calls", -1).append("_id", 1))));
+        if (usage.isEmpty()) {
+            return List.of();
+        }
+        Map<String, Long> p95 = p95(filter);
+        return usage.stream()
             .map(d -> new ToolUsage(d.getString("_id"), number(d, "calls"), number(d, "errors"), number(d, "turns"),
-                    (double) number(d, "durationMs") / number(d, "calls"),
-                    p95(filter, d.getString("_id"), number(d, "calls")), number(d, "repeatedCalls")))
+                    (double) number(d, "durationMs") / number(d, "calls"), p95.getOrDefault(d.getString("_id"), 0L),
+                    number(d, "repeatedCalls")))
             .toList();
     }
 
-    private long p95(InsightsFilter filter, String tool, long calls) {
-        List<Document> ranked = aggregate(List.of(match(filter),
-                new Document("$match", new Document("toolCalls.name", tool)), new Document("$unwind", "$toolCalls"),
-                new Document("$match", new Document("toolCalls.name", tool)),
-                new Document("$sort", new Document("toolCalls.durationMs", 1)),
-                new Document("$skip", ToolUsage.p95Index(calls)), new Document("$limit", 1),
-                new Document("$project", new Document("_id", 0).append("durationMs", "$toolCalls.durationMs"))));
-        return ranked.isEmpty() ? 0 : number(ranked.get(0), "durationMs");
+    /**
+     * The nearest-rank 95th percentile of call durations of every tool, in one pass: ranks the calls of each tool
+     * by duration, then keeps the one at {@link ToolUsage#p95Index(long)}.
+     */
+    private Map<String, Long> p95(InsightsFilter filter) {
+        Document window = new Document("$setWindowFields", new Document("partitionBy", "$tool")
+            .append("sortBy", new Document("durationMs", 1))
+            .append("output", new Document("rank", new Document("$documentNumber", new Document()))
+                .append("n", new Document("$sum", 1).append("window",
+                        new Document("documents", Arrays.asList("unbounded", "unbounded"))))));
+        // Same arithmetic as ToolUsage.p95Index: ceil(0.95 * n) - 1, and at least 0; rank starts at 1.
+        Document index = new Document("$max", Arrays.asList(0, new Document("$subtract",
+                Arrays.asList(new Document("$ceil", new Document("$multiply", Arrays.asList(0.95, "$n"))), 1))));
+        Document pick = new Document("$match", new Document("$expr",
+                new Document("$eq", Arrays.asList("$rank", new Document("$add", Arrays.asList(index, 1))))));
+        Map<String, Long> result = new HashMap<>();
+        aggregate(List.of(match(filter), new Document("$unwind", "$toolCalls"),
+                new Document("$project", new Document("_id", 0).append("tool", "$toolCalls.name")
+                    .append("durationMs", "$toolCalls.durationMs")),
+                window, pick))
+            .forEach(d -> result.put(d.getString("tool"), number(d, "durationMs")));
+        return result;
     }
 
     @Override
@@ -385,22 +404,37 @@ public final class MongoEventStore implements InsightsEventStore, FeedbackStore,
             .limit(MAX_CONVERSATION_TURNS));
     }
 
+    /**
+     * Users active in the range who have no earlier turn in the same scope. Starts from the users of the range, so
+     * the cost follows the range rather than the whole retention; each is checked with one indexed lookup.
+     */
     @Override
     public long newUsers(InsightsFilter filter) {
-        Document match = new Document();
+        Document inRange = new Document();
         if (filter.application() != null) {
-            match.append("application", filter.application());
+            inRange.append("application", filter.application());
         }
         if (filter.tenantId() != null) {
-            match.append("tenantId", filter.tenantId());
+            inRange.append("tenantId", filter.tenantId());
         }
-        match.append("userId", new Document("$ne", null))
-            .append("startedAt", new Document("$lt", Date.from(filter.to())));
-        Date from = Date.from(filter.from());
-        List<Document> counted = aggregate(List.of(new Document("$match", match),
-                new Document("$group", new Document("_id", "$userId")
-                    .append("first", new Document("$min", "$startedAt"))),
-                new Document("$match", new Document("first", new Document("$gte", from))),
+        inRange.append("userId", new Document("$ne", null))
+            .append("startedAt", new Document("$gte", Date.from(filter.from())).append("$lt", Date.from(filter.to())));
+        List<Object> earlier = new ArrayList<>(List.of(new Document("$eq", Arrays.asList("$userId", "$$user")),
+                new Document("$lt", Arrays.asList("$startedAt", Date.from(filter.from())))));
+        if (filter.application() != null) {
+            earlier.add(new Document("$eq", Arrays.asList("$application", filter.application())));
+        }
+        if (filter.tenantId() != null) {
+            earlier.add(new Document("$eq", Arrays.asList("$tenantId", filter.tenantId())));
+        }
+        Document lookup = new Document("$lookup", new Document("from", collectionName)
+            .append("let", new Document("user", "$_id"))
+            .append("pipeline", List.of(new Document("$match", new Document("$expr", new Document("$and", earlier))),
+                    new Document("$limit", 1), new Document("$project", new Document("_id", 1))))
+            .append("as", "earlier"));
+        List<Document> counted = aggregate(List.of(new Document("$match", inRange),
+                new Document("$group", new Document("_id", "$userId")), lookup,
+                new Document("$match", new Document("earlier", new Document("$size", 0))),
                 new Document("$count", "n")));
         return counted.isEmpty() ? 0 : number(counted.get(0), "n");
     }

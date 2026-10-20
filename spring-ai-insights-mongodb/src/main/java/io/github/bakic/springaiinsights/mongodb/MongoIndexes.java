@@ -41,6 +41,9 @@ final class MongoIndexes {
         turns.createIndex(
                 Indexes.compoundIndex(Indexes.ascending("application", "tenantId"), Indexes.descending("startedAt")),
                 new IndexOptions().name("application_tenantId_startedAt"));
+        turns.createIndex(
+                Indexes.compoundIndex(Indexes.ascending("application", "userId"), Indexes.ascending("startedAt")),
+                new IndexOptions().name("application_userId_startedAt"));
         ttl(turns, "startedAt", TTL_INDEX, retention, runCommand);
         feedback.createIndex(
                 Indexes.compoundIndex(Indexes.ascending("application"), Indexes.descending("createdAt")),
