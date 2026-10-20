@@ -125,7 +125,7 @@ class InsightsBedrockPricingAutoConfigurationTest {
     @Test
     void awsCatalogFallsBackToYaml() {
         withFakeClients()
-            .withPropertyValues("ai-insights.pricing.aws.enabled=true", "ai-insights.pricing.models[0].model=claude-sonnet-4",
+            .withPropertyValues("ai-insights.pricing.aws.enabled=true", "ai-insights.pricing.models[0].model=eu.anthropic.claude-sonnet-4-6",
                     "ai-insights.pricing.models[0].input=3.00", "ai-insights.pricing.models[0].output=15.00")
             .run(context -> {
                 assertThat(context).hasNotFailed();

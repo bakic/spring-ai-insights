@@ -2,6 +2,7 @@ package io.github.bakic.springaiinsights.pricing;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -33,8 +34,9 @@ public final class CostCalculator {
         if (price.isEmpty()) {
             metrics.unpricedModel(modelId);
             if (warned.add(modelId)) {
-                log.warn("ai-insights: no price configured for model '" + modelId
-                        + "'; its cost is unknown. Add it to ai-insights.pricing.models");
+                log.warn("ai-insights: no price for model '" + modelId + "'; its cost is unknown. Prices match the "
+                        + "model name exactly; ai-insights.pricing.models has " + configured() + ". Add '" + modelId
+                        + "' to it");
             }
             return null;
         }
@@ -45,6 +47,11 @@ public final class CostCalculator {
             .add(p.cacheRead().multiply(BigDecimal.valueOf(cacheRead)))
             .add(p.cacheWrite().multiply(BigDecimal.valueOf(cacheWrite)));
         return total.divide(ONE_MILLION, 10, RoundingMode.HALF_UP);
+    }
+
+    private String configured() {
+        List<String> models = catalog.configuredModels();
+        return models.isEmpty() ? "no entry" : String.join(", ", models);
     }
 
     public String currency() {

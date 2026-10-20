@@ -366,6 +366,23 @@ tbody tr:hover { background: #fafafb; }
 
 .error strong { display: block; margin-bottom: 0.2rem; }
 
+.pricing-notice {
+  margin: 1.2rem 0;
+  padding: 0.9rem 1rem;
+  background: var(--fail-soft);
+  border: 1px solid var(--fail);
+  border-radius: var(--radius);
+  max-width: 75ch;
+}
+
+.pricing-notice h2 { margin: 0 0 0.4rem; font-size: 1rem; color: var(--fail); }
+
+.pricing-notice p { margin: 0.4rem 0; }
+
+.pricing-notice ul { margin: 0.4rem 0; padding-left: 1.2rem; }
+
+.pricing-notice li { margin: 0.2rem 0; overflow-wrap: anywhere; }
+
 /* Conversation: what it cost overall, then each turn as transcript and receipt */
 .convo .amount { font-size: 2.5rem; overflow-wrap: anywhere; }
 

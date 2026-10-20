@@ -481,6 +481,30 @@
 
   // ---- Pages -------------------------------------------------------------------------------------
 
+  /**
+   * Says which models have no price and why: prices match the model name exactly, so a configured name that
+   * differs by a suffix, a prefix or a variant leaves the model unpriced. Null when every model is priced.
+   */
+  function pricingNotice(data) {
+    const missing = data.unpricedModels || [];
+    if (missing.length === 0) {
+      return null;
+    }
+    const configured = data.configuredModels || [];
+    return el('section', { class: 'pricing-notice', role: 'alert', 'aria-label': 'Models without a price' },
+      el('h2', { text: `${plural(missing.length, 'model has', 'models have')} no price, so their cost is missing` }),
+      el('p', null, 'Prices are matched on the exact model name, as the provider reports it. Update ',
+        el('code', { text: 'ai-insights.pricing.models' }), ' so that each name below is listed exactly as written.'),
+      el('ul', null, missing.map((m) => el('li', null,
+        el('code', { text: m.model }), ` used in ${plural(m.calls, 'call', 'calls')}`,
+        m.similar
+          ? [' · you configured ', el('code', { text: m.similar }), ', which is not the same name']
+          : ' · no similar name is configured'))),
+      el('p', { class: 'muted' }, configured.length
+        ? ['Configured now: ', configured.flatMap((model, k) => (k ? [', ', el('code', { text: model })] : [el('code', { text: model })]))]
+        : 'No model is configured under ai-insights.pricing.models.'));
+  }
+
   async function overview() {
     const params = filterParams();
     const [data, earlier, spend] = await Promise.all([
@@ -494,6 +518,7 @@
     const priced = now.turns - now.unpricedTurns;
     return [
       pageHead('Overview', `What the assistant cost and how it was used ${PERIOD_TEXT[state.period]}.`),
+      pricingNotice(spend),
       el('section', { class: 'statement sheet', 'aria-label': 'Statement for the period' },
         el('div', { class: 'due' },
           el('h2', { text: 'Cost this period' }),
@@ -502,7 +527,7 @@
             ? `${plural(now.turns, 'turn', 'turns')} · ${moneyHeadline(Number(now.cost) / priced)} per priced turn`
             : plural(now.turns, 'turn', 'turns') }),
           now.unpricedTurns ? el('p', { class: 'warn', text: `${plural(now.unpricedTurns, 'turn has', 'turns have')} no price: `
-            + 'add their models under ai-insights.pricing.' }) : null,
+            + 'see the warning above.' }) : null,
           el('dl', { class: 'month' },
             costRow('This month so far', moneyHeadline(spend.monthToDate)),
             costRow('Estimated month end', spend.monthEndProjection === null ? 'after day one' : moneyHeadline(spend.monthEndProjection))),
@@ -577,6 +602,7 @@
     const data = await api('cost', params);
     return [
       pageHead('Cost', `What the assistant cost ${PERIOD_TEXT[state.period]}, and where the month is heading.`),
+      pricingNotice(data),
       ledger([
         { label: 'Cost in period', value: moneyHeadline(data.total) },
         { label: 'Per conversation', value: moneyHeadline(data.perConversation) },
@@ -587,7 +613,7 @@
         },
         {
           label: 'Turns without a price', value: count(data.unpricedTurns),
-          hint: data.unpricedTurns ? 'add their models under ai-insights.pricing' : 'every turn is priced'
+          hint: data.unpricedTurns ? 'see the warning above' : 'every turn is priced'
         }
       ]),
       el('div', { class: 'pair' },

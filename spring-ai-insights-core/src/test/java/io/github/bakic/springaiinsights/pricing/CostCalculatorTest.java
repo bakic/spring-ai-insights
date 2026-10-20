@@ -25,11 +25,20 @@ class CostCalculatorTest {
     private final CostCalculator calc = new CostCalculator(catalog, new InsightsMetrics(reg, "app", false));
 
     @Test
-    void exactThenLongestContainedMatch() {
-        assertThat(catalog.find("eu.anthropic.claude-sonnet-4-20250514-v1:0")).map(ModelPrice::model).contains("anthropic.claude-sonnet-4");
-        assertThat(catalog.find("anthropic.claude-haiku")).map(ModelPrice::model).contains("anthropic.claude");
+    void onlyAnExactModelIsPriced() {
+        assertThat(catalog.find("anthropic.claude-sonnet-4")).map(ModelPrice::model).contains("anthropic.claude-sonnet-4");
+        assertThat(catalog.find("anthropic.claude")).map(ModelPrice::model).contains("anthropic.claude");
         assertThat(catalog.find("gpt-x")).map(ModelPrice::model).contains("gpt-x");
+        assertThat(catalog.find("eu.anthropic.claude-sonnet-4-20250514-v1:0")).isEmpty();
+        assertThat(catalog.find("anthropic.claude-haiku")).isEmpty();
         assertThat(catalog.find("mistral")).isEmpty();
+    }
+
+    @Test
+    void aNearMissIsUnpricedAndCounted() {
+        assertThat(calc.cost("anthropic.claude-sonnet-4-20250514", 1000, 500, 0, 0)).isNull();
+        assertThat(reg.get("ai.insights.unpriced.models").tag("model", "anthropic.claude-sonnet-4-20250514")
+            .counter().count()).isEqualTo(1.0);
     }
 
     @Test

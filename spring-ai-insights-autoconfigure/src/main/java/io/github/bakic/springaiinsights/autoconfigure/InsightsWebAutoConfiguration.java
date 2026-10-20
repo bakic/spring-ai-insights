@@ -67,7 +67,8 @@ public class InsightsWebAutoConfiguration {
         DashboardPages pages = new DashboardPages(analytics, store,
                 InsightsAutoConfiguration.application(properties, environment), prices.currency(), clock,
                 new DashboardOptions(catalogs.orderedStream().toList(),
-                        properties.getQuality().getAbandonedAfter(), dashboard.getTraceUrl()));
+                        properties.getQuality().getAbandonedAfter(), dashboard.getTraceUrl(),
+                        prices.configuredModels()));
         return DashboardRoutes.create(dashboard.getPath(), dashboard.getRole(), dashboard.isAllowAnonymous(), pages,
                 clock, reports.getIfAvailable());
     }

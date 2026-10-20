@@ -133,6 +133,11 @@ public final class AwsPriceCatalog implements PriceCatalog, AutoCloseable {
         });
     }
 
+    @Override
+    public List<String> configuredModels() {
+        return fallback.configuredModels();
+    }
+
     /** Refreshes the snapshot now, synchronously. Never throws: a failure is logged and counted, and the
      * previous snapshot (or none) is kept; the suppliers are called again at the next refresh. Returns
      * whether the refresh succeeded, so the caller can schedule the next attempt accordingly. */

@@ -155,7 +155,7 @@ class AwsPriceCatalogTest {
         bedrockFails.set(true);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         AwsPriceCatalog catalog = new AwsPriceCatalog(() -> pricing, () -> bedrock, () -> REGION, Duration.ofHours(1),
-                yaml(price("claude-sonnet-4", "3.00")), registry);
+                yaml(price("anthropic.claude-sonnet-4-6", "3.00")), registry);
         catalog.refresh();
         assertThat(catalog.find("anthropic.claude-sonnet-4-6").orElseThrow().input()).isEqualByComparingTo("3.00");
         assertThat(registry.get("ai.insights.pricing.refresh").tag("outcome", "failure").counter().count())
@@ -185,7 +185,7 @@ class AwsPriceCatalogTest {
     @Test
     void modelMissingFromPriceListUsesYaml() {
         modelSummaries.add(model("anthropic.claude-new-9", "Claude New 9"));
-        AwsPriceCatalog withYaml = catalog(yaml(price("claude-new-9", "9.99")));
+        AwsPriceCatalog withYaml = catalog(yaml(price("anthropic.claude-new-9", "9.99")));
         withYaml.refresh();
         assertThat(withYaml.find("anthropic.claude-new-9").orElseThrow().input()).isEqualByComparingTo("9.99");
 
@@ -196,7 +196,7 @@ class AwsPriceCatalogTest {
 
     @Test
     void awsWinsOverYamlAndWarnsOnce(CapturedOutput output) {
-        AwsPriceCatalog catalog = catalog(yaml(price("claude-sonnet-4", "3.00")));
+        AwsPriceCatalog catalog = catalog(yaml(price("eu.anthropic.claude-sonnet-4-6", "3.00")));
         catalog.refresh();
         assertThat(catalog.find("eu.anthropic.claude-sonnet-4-6").orElseThrow().input())
             .isEqualByComparingTo("3.30");

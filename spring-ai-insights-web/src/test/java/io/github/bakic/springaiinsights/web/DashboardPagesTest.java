@@ -31,6 +31,7 @@ import io.github.bakic.springaiinsights.web.pages.OverviewPage;
 import io.github.bakic.springaiinsights.web.pages.QualityPage;
 import io.github.bakic.springaiinsights.web.pages.TenantsPage;
 import io.github.bakic.springaiinsights.web.pages.TurnRow;
+import io.github.bakic.springaiinsights.web.pages.UnpricedModel;
 import io.github.bakic.springaiinsights.web.pages.UsagePage;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -40,6 +41,7 @@ import static io.github.bakic.springaiinsights.analytics.ContractTurns.HELP;
 import static io.github.bakic.springaiinsights.analytics.ContractTurns.SHOP;
 import static io.github.bakic.springaiinsights.analytics.ContractTurns.TO;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 class DashboardPagesTest {
 
@@ -310,6 +312,30 @@ class DashboardPagesTest {
         assertThat(page.turns().get(0).turnId()).isEqualTo("L0007");
         assertThat(page.turns().get(page.turns().size() - 1).turnId()).isEqualTo(String.format("L%04d", total - 1));
         assertThat(page.totalTurns()).isEqualTo(total);
+    }
+
+    @Test
+    void costNamesTheModelsWithoutAPriceAndTheConfiguredOnesTheyResemble() {
+        DashboardOptions options = new DashboardOptions(List.of(), Duration.ofMinutes(30), null,
+                List.of("m1", "gpt-4o"));
+
+        CostPage cost = new DashboardPages(store, store, "shop", "USD", Clock.systemUTC(), options)
+            .cost(SHOP);
+
+        assertThat(cost.configuredModels()).containsExactly("m1", "gpt-4o");
+        assertThat(cost.unpricedModels()).extracting(UnpricedModel::model, UnpricedModel::calls)
+            .containsExactly(tuple("m2", 2L));
+        assertThat(cost.unpricedModels().get(0).similar()).isNull();
+    }
+
+    @Test
+    void similarConfiguredModelIsTheLongestOneContainingOrContainedInTheReportedName() {
+        List<String> configured = List.of("gpt-4o", "gpt-4o-mini", "claude");
+        assertThat(DashboardPages.similarConfigured("gpt-4o-mini-2024-07-18", configured)).isEqualTo("gpt-4o-mini");
+        assertThat(DashboardPages.similarConfigured("GPT-4O-2024", configured)).isEqualTo("gpt-4o");
+        assertThat(DashboardPages.similarConfigured("gpt", configured)).isEqualTo("gpt-4o-mini");
+        assertThat(DashboardPages.similarConfigured("llama", configured)).isNull();
+        assertThat(DashboardPages.similarConfigured("llama", List.of())).isNull();
     }
 
     @Test

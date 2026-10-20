@@ -68,8 +68,8 @@ warning at startup when it finds 2.0.0.
 
    Without it, user IDs are pseudonymised with a random key that changes on every restart, and a warning is logged.
 
-3. Declare your model prices (per 1,000,000 tokens). `model` matches the reported model ID exactly,
-   or as a substring (the longest match wins), so one entry covers regional prefixes such as `eu.`:
+3. Declare your model prices (per 1,000,000 tokens). `model` must equal the model ID the provider reports,
+   character for character:
 
    ```yaml
    ai-insights:
@@ -88,17 +88,20 @@ warning at startup when it finds 2.0.0.
            input-includes-cached: true   # OpenAI counts cached tokens inside input tokens
    ```
 
-   Because of substring matching, `gpt-4o` also matches `gpt-4o-mini`. List every model you use,
-   so the more specific entry (`gpt-4o-mini`) wins over the shorter one.
+   Matching is exact on purpose. A name that only contains, or is contained in, a configured one — a dated
+   snapshot such as `gpt-4o-2024-08-06`, a regional prefix such as `eu.`, a variant such as `gpt-4o-mini` — may
+   be priced differently, so guessing would show a wrong cost. List every model ID you use, as reported. A
+   model that is not listed is recorded without a cost, and the Overview and Cost pages show a warning naming
+   it, the configured entry it resembles, and the entries that exist, so you can fix the YAML.
 
    Amazon Bedrock geographic inference profiles (`eu.`, `us.`, `apac.`, …) and `global.` profiles are
    priced differently — in `eu-west-1`, Claude Sonnet 4.6 is 3.30 / 16.50 per 1M input/output tokens
-   through an `eu.` profile but 3.00 / 15.00 through a `global.` profile — so a single substring entry
-   cannot price both correctly. For Bedrock, see
+   through an `eu.` profile but 3.00 / 15.00 through a `global.` profile — so each needs its own entry. For Bedrock, see
    [Automatic Amazon Bedrock pricing](#automatic-amazon-bedrock-pricing) below instead of hand-typing
    these prices.
 
-   Models without a price are still recorded, with a `null` cost, one warning, and the `ai.insights.unpriced.models` counter.
+   Models without a price are still recorded, with a `null` cost, one log warning, the `ai.insights.unpriced.models`
+   counter, a warning on the dashboard, and a note in the weekly report.
 
 4. Use the auto-configured `ChatClient.Builder` as usual. The advisor is added for you:
 

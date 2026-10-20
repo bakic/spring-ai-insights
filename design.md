@@ -157,8 +157,10 @@ the in-memory store uses a random per-start secret and logs a warning; a persist
 ### 8.4 Cost
 
 `PriceCatalog` from properties: per model ID → input, output, cache-read, cache-write prices per
-1M tokens, currency. Unknown model → cost `null`, a warning log once, and an
-`unpriced-model` counter. A sample catalog for common Bedrock models ships in the docs (prices
+1M tokens, currency. A model ID is priced only on an exact match: a name that merely contains or is
+contained in a configured one (snapshot, regional prefix, variant) may cost differently, so a wrong cost is
+worse than none. Unknown model → cost `null`, a warning log once, an `unpriced-model` counter, and a
+dashboard warning that names the model, the similar configured entry and the configured entries. A sample catalog for common Bedrock models ships in the docs (prices
 vary by region and change, so users own their values).
 
 ### 8.5 Storage
