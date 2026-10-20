@@ -50,8 +50,13 @@ warning at startup when it finds 2.0.0.
    // settings.gradle.kts
    includeBuild("../spring-ai-insights")
    // build.gradle.kts
-   implementation("io.github.bakic:spring-ai-insights-starter:0.1.0-SNAPSHOT")
+   implementation("io.github.bakic:spring-ai-insights-starter:<version>")
    ```
+
+   Replace `<version>` with the version in this repository's `gradle.properties`
+   (a composite build only needs group and artifact to match; the version is informational).
+   Once released, use the latest version from [Maven Central](https://central.sonatype.com/namespace/io.github.bakic)
+   instead of a composite build.
 
 2. Set a pseudonymisation secret (from your secret store, not from Git):
 
@@ -198,7 +203,7 @@ To also see documents that are **never** retrieved in an Amazon Bedrock Knowledg
 `spring-ai-insights-bedrock` (it brings the AWS SDK `bedrockagent` client) and list the knowledge bases:
 
 ```kotlin
-implementation("io.github.bakic:spring-ai-insights-bedrock:0.1.0-SNAPSHOT")
+implementation("io.github.bakic:spring-ai-insights-bedrock:<version>")
 ```
 
 ```yaml
@@ -241,7 +246,7 @@ profile but 3.00 / 15.00 through a `global.` profile), `spring-ai-insights-bedro
 model calls automatically from the AWS Price List API:
 
 ```kotlin
-implementation("io.github.bakic:spring-ai-insights-bedrock:0.1.0-SNAPSHOT")
+implementation("io.github.bakic:spring-ai-insights-bedrock:<version>")
 ```
 
 ```yaml
