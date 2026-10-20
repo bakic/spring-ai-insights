@@ -246,3 +246,56 @@ test('link targets lists every link of a message once', () => {
   assert.deepEqual(linkTargets('See [a](s3://b/a.md), [again](s3://b/a.md)\n- [b](https://x/b) `[no](s3://c)`'),
     ['s3://b/a.md', 'https://x/b']);
 });
+
+// Messages come from users and models: pathological input must neither freeze the page nor throw.
+const within = (ms, fn) => {
+  const start = process.hrtime.bigint();
+  const result = fn();
+  const elapsed = Number(process.hrtime.bigint() - start) / 1e6;
+  assert.ok(elapsed < ms, `took ${elapsed.toFixed(0)} ms, expected under ${ms} ms`);
+  return result;
+};
+
+test('unclosed emphasis markers parse in bounded time', () => {
+  within(1000, () => parse('*a '.repeat(32000)));
+  within(1000, () => parse('_a '.repeat(32000)));
+  within(1000, () => parse('**a '.repeat(32000)));
+});
+
+test('unclosed link openers parse in bounded time', () => {
+  within(1000, () => parse('[a]('.repeat(32000)));
+  within(1000, () => parse('['.repeat(32000)));
+  within(1000, () => parse('[a](<'.repeat(32000)));
+});
+
+test('deeply nested quotes, lists and emphasis do not overflow the stack', () => {
+  assert.doesNotThrow(() => within(1000, () => parse('>'.repeat(20000) + ' deep')));
+  assert.doesNotThrow(() => within(1000, () => parse(Array.from({ length: 3000 }, (_, n) => ' '.repeat(n) + '- x').join('\n'))));
+  assert.doesNotThrow(() => within(1000, () => parse('*a '.repeat(500) + 'b' + ' a*'.repeat(500))));
+});
+
+test('long runs of backticks and heading markers parse in bounded time', () => {
+  within(1000, () => parse('`a``'.repeat(8000)));
+  within(1000, () => parse('# ' + ' #'.repeat(9000)));
+});
+
+test('text past the Markdown limit is kept as plain text', () => {
+  const tail = '**not bold** '.repeat(3000);
+  const blocks = parse('intro\n\n' + 'x\n\n'.repeat(8000) + tail);
+  const last = blocks[blocks.length - 1];
+  assert.equal(last.type, 'paragraph');
+  assert.deepEqual(last.inline.map((node) => node.type), ['text']);
+  assert.ok(last.inline[0].text.includes('**not bold**'));
+});
+
+test('nesting beyond the depth limit is shown as text', () => {
+  const blocks = parse('>'.repeat(40) + ' deep');
+  let node = blocks[0];
+  let depth = 0;
+  while (node.type === 'quote') {
+    node = node.blocks[0];
+    depth++;
+  }
+  assert.ok(depth <= 17, `depth ${depth}`);
+  assert.equal(node.type, 'paragraph');
+});

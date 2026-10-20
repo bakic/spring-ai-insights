@@ -16,13 +16,32 @@
   const AUTOLINK = /^<((?:https?:\/\/|mailto:)[^\s<>]+)>/i;
   const BARE_URL = /^https?:\/\/[^\s<>]+/i;
 
+  // Messages come from users and models, so the reader bounds its own work: past these limits text is shown as is.
+  const MAX_MARKDOWN_LENGTH = 20000; // characters read as Markdown; the rest of a message stays plain text
+  const MAX_DEPTH = 16; // nested quotes, list items, emphasis and link labels
+  const MAX_EMPHASIS_CLOSERS = 32; // candidate closing markers tried per opening marker
+  const MAX_LINK_LABEL = 1000; // characters scanned for the end of a link label
+  const MAX_LINK_TARGET = 2000; // characters scanned for the end of a link target
+
   function parse(markdown) {
     if (markdown === null || markdown === undefined || markdown === '') {
       return [];
     }
-    const lines = String(markdown).replace(/\r\n?/g, '\n').split('\n')
+    let source = String(markdown);
+    let rest = '';
+    if (source.length > MAX_MARKDOWN_LENGTH) {
+      const cut = source.lastIndexOf('\n', MAX_MARKDOWN_LENGTH);
+      const at = cut > 0 ? cut : MAX_MARKDOWN_LENGTH;
+      rest = source.slice(at).trim();
+      source = source.slice(0, at);
+    }
+    const lines = source.replace(/\r\n?/g, '\n').split('\n')
       .map((line) => line.replace(/^\t+/, (tabs) => '    '.repeat(tabs.length)));
-    return blocks(lines);
+    const out = blocks(lines, 0);
+    if (rest) {
+      out.push({ type: 'paragraph', inline: [{ type: 'text', text: rest }] });
+    }
+    return out;
   }
 
   function blank(line) {
@@ -49,7 +68,10 @@
       || isTableStart(lines, i);
   }
 
-  function blocks(lines) {
+  function blocks(lines, depth) {
+    if (depth > MAX_DEPTH) {
+      return [{ type: 'paragraph', inline: [{ type: 'text', text: lines.join('\n') }] }];
+    }
     const out = [];
     let i = 0;
     while (i < lines.length) {
@@ -60,7 +82,7 @@
       } else if ((m = FENCE.exec(line))) {
         i = fence(lines, i, m, out);
       } else if ((m = HEADING.exec(line))) {
-        out.push({ type: 'heading', level: m[1].length, inline: inline(m[2] || '') });
+        out.push({ type: 'heading', level: m[1].length, inline: inline(m[2] || '', false, 0) });
         i++;
       } else if (RULE.test(line)) {
         out.push({ type: 'rule' });
@@ -71,9 +93,9 @@
           quoted.push(m[1]);
           i++;
         }
-        out.push({ type: 'quote', blocks: blocks(quoted) });
+        out.push({ type: 'quote', blocks: blocks(quoted, depth + 1) });
       } else if (isItem(line)) {
-        i = list(lines, i, out);
+        i = list(lines, i, out, depth);
       } else if (isTableStart(lines, i)) {
         i = table(lines, i, out);
       } else {
@@ -83,7 +105,7 @@
           text.push(lines[i].trim());
           i++;
         }
-        out.push({ type: 'paragraph', inline: inline(text.join('\n')) });
+        out.push({ type: 'paragraph', inline: inline(text.join('\n'), false, 0) });
       }
     }
     return out;
@@ -103,7 +125,7 @@
     return i + 1;
   }
 
-  function list(lines, i, out) {
+  function list(lines, i, out, depth) {
     const ordered = ITEM.exec(lines[i])[3] !== undefined;
     const start = ordered ? parseInt(ITEM.exec(lines[i])[3], 10) : 1;
     const sibling = (line) => isItem(line) && (ITEM.exec(line)[3] !== undefined) === ordered;
@@ -138,7 +160,7 @@
         }
         i++;
       }
-      items.push(blocks(content));
+      items.push(blocks(content, depth + 1));
       let next = i;
       while (next < lines.length && blank(lines[next])) {
         next++;
@@ -181,16 +203,19 @@
       while (row.length < head.length) {
         row.push('');
       }
-      rows.push(row.map(inline));
+      rows.push(row.map((cell) => inline(cell, false, 0)));
       i++;
     }
-    out.push({ type: 'table', align, head: head.map(inline), rows });
+    out.push({ type: 'table', align, head: head.map((cell) => inline(cell, false, 0)), rows });
     return i;
   }
 
   // ---- Inline --------------------------------------------------------------------------------------
 
-  function inline(source, noLinks) {
+  function inline(source, noLinks, depth) {
+    if (depth > MAX_DEPTH) {
+      return [{ type: 'text', text: String(source) }];
+    }
     const out = [];
     let text = '';
     const flush = () => {
@@ -235,7 +260,7 @@
         const link = linkAt(src, c === '!' ? i + 1 : i);
         if (link) {
           flush();
-          out.push({ type: 'link', href: link.href, children: inline(link.label, true) });
+          out.push({ type: 'link', href: link.href, children: inline(link.label, true, depth + 1) });
           i = link.end;
           continue;
         }
@@ -260,7 +285,7 @@
         }
       }
       if (c === '*' || c === '_') {
-        const emphasis = emphasisAt(src, i, noLinks);
+        const emphasis = emphasisAt(src, i, noLinks, depth);
         if (emphasis) {
           flush();
           out.push(emphasis.node);
@@ -288,7 +313,7 @@
     return -1;
   }
 
-  function emphasisAt(src, i, noLinks) {
+  function emphasisAt(src, i, noLinks, depth) {
     const c = src[i];
     const double = src[i + 1] === c;
     const width = double ? 2 : 1;
@@ -300,7 +325,9 @@
     if (c === '_' && i > 0 && WORD.test(src[i - 1])) {
       return null;
     }
-    for (let at = src.indexOf(marker, i + width + 1); at >= 0; at = src.indexOf(marker, at + 1)) {
+    let tried = 0;
+    for (let at = src.indexOf(marker, i + width + 1); at >= 0 && tried < MAX_EMPHASIS_CLOSERS;
+      at = src.indexOf(marker, at + 1), tried++) {
       if (/\s/.test(src[at - 1])) {
         continue;
       }
@@ -312,7 +339,7 @@
       }
       const inner = src.slice(i + width, at);
       return {
-        node: { type: double ? 'strong' : 'em', children: inline(inner, noLinks) },
+        node: { type: double ? 'strong' : 'em', children: inline(inner, noLinks, depth + 1) },
         end: at + width
       };
     }
@@ -322,7 +349,8 @@
   function linkAt(src, open) {
     let depth = 0;
     let close = -1;
-    for (let k = open; k < src.length; k++) {
+    const labelEnd = Math.min(src.length, open + MAX_LINK_LABEL);
+    for (let k = open; k < labelEnd; k++) {
       const ch = src[k];
       if (ch === '\\') {
         k++;
@@ -354,7 +382,8 @@
     } else {
       let parens = 0;
       const begin = k;
-      for (; k < src.length; k++) {
+      const targetEnd = Math.min(src.length, k + MAX_LINK_TARGET);
+      for (; k < targetEnd; k++) {
         const ch = src[k];
         if (/\s/.test(ch)) {
           break;
