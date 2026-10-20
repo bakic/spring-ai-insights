@@ -10,7 +10,9 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 /**
- * Sends last week's report once per application, whatever the number of instances. Never throws.
+ * Sends last week's report once per application, whatever the number of instances. Never throws. The claim is given
+ * back when the report cannot be built or no sender delivers it, so that the next run retries; once one sender has
+ * delivered it, the claim stays so that it is not sent twice.
  */
 public final class WeeklyReportJob implements Runnable {
 
@@ -42,30 +44,52 @@ public final class WeeklyReportJob implements Runnable {
         LocalDate firstDay = this.reports.lastWeekStart();
         String key = "weekly-report:" + this.application + ":" + firstDay;
         WeeklyReport report;
+        boolean claimed = false;
         try {
             if (!this.lock.claim(key, this.clock.instant().plus(CLAIM))) {
                 log.debug("Weekly report " + key + " already claimed by another instance");
                 return;
             }
+            claimed = true;
             report = this.reports.forWeek(this.application, firstDay);
         }
         catch (RuntimeException ex) {
             log.warn("Weekly report for week of " + firstDay + " not built: " + ex);
+            if (claimed) {
+                release(key);
+            }
             return;
         }
+        boolean delivered = this.senders.isEmpty();
         for (ReportSender sender : this.senders) {
             try {
                 sender.send(report);
+                delivered = true;
                 log.info("Weekly report for week of " + firstDay + " sent by " + sender.name());
             }
             catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
                 log.warn("Weekly report sending by " + sender.name() + " interrupted");
+                if (!delivered) {
+                    release(key);
+                }
                 return;
             }
             catch (Exception ex) {
                 log.warn("Weekly report sending by " + sender.name() + " failed: " + ex);
             }
+        }
+        if (!delivered) {
+            release(key);
+        }
+    }
+
+    private void release(String key) {
+        try {
+            this.lock.release(key);
+        }
+        catch (RuntimeException ex) {
+            log.warn("Weekly report claim " + key + " could not be released, it will not be retried: " + ex);
         }
     }
 

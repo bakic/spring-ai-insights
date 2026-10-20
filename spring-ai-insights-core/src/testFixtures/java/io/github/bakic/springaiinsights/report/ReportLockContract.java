@@ -30,6 +30,22 @@ public abstract class ReportLockContract {
     }
 
     @Test
+    void releasedClaimCanBeClaimedAgain() {
+        ReportLock lock = lock();
+        assertThat(lock.claim("k", expiry())).isTrue();
+        lock.release("k");
+        assertThat(lock.claim("k", expiry())).isTrue();
+        assertThat(lock.claim("k", expiry())).isFalse();
+    }
+
+    @Test
+    void releasingAnUnknownKeyDoesNothing() {
+        ReportLock lock = lock();
+        lock.release("never-claimed");
+        assertThat(lock.claim("never-claimed", expiry())).isTrue();
+    }
+
+    @Test
     void keysAreIndependent() {
         ReportLock lock = lock();
         assertThat(lock.claim("a", expiry())).isTrue();

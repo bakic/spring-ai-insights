@@ -155,6 +155,11 @@ public final class MongoEventStore implements InsightsEventStore, FeedbackStore,
         }
     }
 
+    @Override
+    public void release(String key) {
+        locks().deleteOne(Filters.eq("_id", key));
+    }
+
     /**
      * An index failure does not lose the turn: the save goes ahead, and the indexes are retried a minute later. A
      * MongoDB that is down fails the save itself, which the writer counts.

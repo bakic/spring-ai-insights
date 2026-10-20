@@ -22,6 +22,11 @@ public final class InMemoryReportLock implements ReportLock {
     }
 
     @Override
+    public void release(String key) {
+        claims.remove(key);
+    }
+
+    @Override
     public boolean claim(String key, Instant expiresAt) {
         Instant now = clock.instant();
         claims.values().removeIf(expiry -> !expiry.isAfter(now));

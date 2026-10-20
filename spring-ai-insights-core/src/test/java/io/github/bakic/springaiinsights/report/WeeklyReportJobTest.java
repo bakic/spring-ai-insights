@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -112,5 +113,50 @@ class WeeklyReportJobTest {
                 "helpdesk", clock);
         assertThatNoException().isThrownBy(job::run);
         assertThat(deliveries).isEmpty();
+    }
+
+    @Test
+    void releasesTheClaimWhenNoSenderDelivers() {
+        ReportLock lock = new InMemoryReportLock(clock);
+        new WeeklyReportJob(reports, lock, List.of(failing("slack"), failing("email")), "helpdesk", clock).run();
+        new WeeklyReportJob(reports, lock, List.of(sender("slack")), "helpdesk", clock).run();
+        assertThat(deliveries).containsExactly("slack:helpdesk:2026-10-12");
+    }
+
+    @Test
+    void releasesTheClaimWhenTheReportCannotBeBuilt() {
+        ReportLock lock = new InMemoryReportLock(clock);
+        when(analytics.summary(any())).thenThrow(new IllegalStateException("store down"));
+        new WeeklyReportJob(reports, lock, List.of(sender("slack")), "helpdesk", clock).run();
+        doReturn(new UsageSummary(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, BigDecimal.ZERO, 0, 0, null, 0, 0, 0, 0))
+            .when(analytics)
+            .summary(any());
+        new WeeklyReportJob(reports, lock, List.of(sender("slack")), "helpdesk", clock).run();
+        assertThat(deliveries).containsExactly("slack:helpdesk:2026-10-12");
+    }
+
+    @Test
+    void keepsTheClaimOnceOneSenderDelivered() {
+        ReportLock lock = new InMemoryReportLock(clock);
+        new WeeklyReportJob(reports, lock, List.of(failing("slack"), sender("email")), "helpdesk", clock).run();
+        new WeeklyReportJob(reports, lock, List.of(sender("email")), "helpdesk", clock).run();
+        assertThat(deliveries).containsExactly("email:helpdesk:2026-10-12");
+    }
+
+    @Test
+    void aFailingReleaseIsLoggedNotThrown() {
+        ReportLock lock = new ReportLock() {
+            @Override
+            public boolean claim(String key, Instant expiresAt) {
+                return true;
+            }
+
+            @Override
+            public void release(String key) {
+                throw new IllegalStateException("store down");
+            }
+        };
+        WeeklyReportJob job = new WeeklyReportJob(reports, lock, List.of(failing("slack")), "helpdesk", clock);
+        assertThatNoException().isThrownBy(job::run);
     }
 }

@@ -15,4 +15,11 @@ public interface ReportLock {
      * @return {@code true} for the first claim of a key not claimed or whose claim expired, else {@code false}
      */
     boolean claim(String key, Instant expiresAt);
+
+    /**
+     * Gives a claim back, so that the next claim of the key wins. Used when the claimed job produced nothing, so that
+     * another run (or instance) can retry it. Does nothing by default.
+     */
+    default void release(String key) {
+    }
 }
