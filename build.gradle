@@ -1,0 +1,182 @@
+import org.gradle.api.component.AdhocComponentWithVariants
+import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.xpath.XPathFactory
+import javax.xml.xpath.XPathConstants
+import org.w3c.dom.NodeList
+
+plugins {
+    id 'com.vanniktech.maven.publish' version '0.37.0' apply false
+}
+
+subprojects {
+    apply plugin: 'java-library'
+
+    group = rootProject.group
+    version = rootProject.version
+
+    repositories { mavenCentral() }
+
+    java {
+        toolchain { languageVersion = JavaLanguageVersion.of(21) }
+    }
+
+    def springBootVersion = project.property('springBootVersion')
+    def springAiVersion = project.property('springAiVersion')
+    def awsSdkVersion = project.property('awsSdkVersion')
+
+    // The BOMs only pick versions inside this build. Published modules carry resolved versions instead, so
+    // adding the starter does not impose Spring Boot's or Spring AI's version catalog on an application.
+    def managedVersionsConfig = configurations.create('managedVersions') {
+        canBeConsumed = false
+        canBeResolved = false
+    }
+    configurations.matching { it.name.endsWith('Classpath') || it.name.endsWith('nnotationProcessor') }
+        .configureEach { extendsFrom(managedVersionsConfig) }
+
+    dependencies {
+        add('managedVersions', platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
+        add('managedVersions', platform("org.springframework.ai:spring-ai-bom:$springAiVersion"))
+        add('managedVersions', platform("software.amazon.awssdk:bom:$awsSdkVersion"))
+        testImplementation 'org.springframework.boot:spring-boot-starter-test'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.compilerArgs.add('-parameters')
+        options.encoding = 'UTF-8'
+    }
+    tasks.withType(Javadoc).configureEach { options.addStringOption('Xdoclint:none', '-quiet') }
+    tasks.withType(Test).configureEach { useJUnitPlatform() }
+}
+
+def publishedModules = [
+    'spring-ai-insights-core',
+    'spring-ai-insights-mongodb',
+    'spring-ai-insights-bedrock',
+    'spring-ai-insights-web',
+    'spring-ai-insights-autoconfigure',
+    'spring-ai-insights-starter',
+]
+
+def stagingRepo = layout.buildDirectory.dir('staging-repo')
+
+def cleanStagingRepo = tasks.register('cleanStagingRepo', Delete) { delete(stagingRepo) }
+
+def projectUrl = project.property('projectUrl')
+
+configure(subprojects.findAll { it.name in publishedModules }) {
+    apply plugin: 'com.vanniktech.maven.publish'
+
+    mavenPublishing {
+        publishToMavenCentral()
+        if (providers.gradleProperty('signingInMemoryKey').present) {
+            signAllPublications()
+        }
+        coordinates(group.toString(), project.name, version.toString())
+        pom {
+            name = project.name
+            description = provider { project.description }
+            url = projectUrl
+            licenses {
+                license {
+                    name = 'The Apache License, Version 2.0'
+                    url = 'https://www.apache.org/licenses/LICENSE-2.0.txt'
+                    distribution = 'repo'
+                }
+            }
+            developers {
+                developer {
+                    id = 'bakic'
+                    name = 'Spring AI Insights contributors'
+                    url = projectUrl
+                }
+            }
+            scm {
+                url = projectUrl
+                connection = "scm:git:${projectUrl}.git"
+                developerConnection = "scm:git:${projectUrl}.git"
+            }
+        }
+    }
+
+    publishing {
+        publications.withType(MavenPublication).configureEach {
+            versionMapping {
+                usage('java-api') { fromResolutionOf('compileClasspath') }
+                usage('java-runtime') { fromResolutionResult() }
+            }
+        }
+        repositories {
+            maven {
+                name = 'staging'
+                url = uri(stagingRepo)
+            }
+        }
+    }
+
+    // Test fixtures are for this build's own tests, not a public API.
+    plugins.withId('java-test-fixtures') {
+        def javaComponent = components['java'] as AdhocComponentWithVariants
+        afterEvaluate {
+            ['testFixturesApiElements', 'testFixturesRuntimeElements', 'testFixturesSourcesElements']
+                .collect { configurations.findByName(it) }
+                .findAll { it != null }
+                .each { javaComponent.withVariantsFromConfiguration(it) { skip() } }
+        }
+    }
+
+    tasks.matching { it.name.startsWith('publish') && it.name.endsWith('ToStagingRepository') }
+        .configureEach { dependsOn(cleanStagingRepo) }
+}
+
+// Publishes to build/staging-repo and checks it the way Maven Central validates a deployment.
+tasks.register('verifyPublication') {
+    group = 'verification'
+    description = 'Publishes the library modules to build/staging-repo and checks them against Maven Central rules.'
+    dependsOn(publishedModules.collect { ":$it:publishAllPublicationsToStagingRepository" })
+    def repo = stagingRepo
+    def modules = publishedModules
+    def projectVersion = version.toString()
+    def groupPath = project.group.toString().replace('.', '/')
+    doLast {
+        def root = repo.get().asFile.toPath().resolve(groupPath).toFile()
+        def errors = []
+        def unexpected = (root.list() ?: new String[0]).findAll { !(it in modules) }
+        if (!unexpected.isEmpty()) errors << "unexpected published modules: $unexpected"
+        def base = projectVersion - '-SNAPSHOT'
+        for (module in modules) {
+            def dir = new File(root, "$module/$projectVersion")
+            def files = (dir.listFiles() ?: new File[0]).collect { it.name }
+                .findAll { it.startsWith("$module-$base") }
+            def has = { String suffix, boolean plain = false ->
+                files.any { it.endsWith(suffix) && (!plain || !(it.endsWith('-sources.jar') || it.endsWith('-javadoc.jar'))) }
+            }
+            if (!has('.jar', true)) errors << "$module: no jar"
+            if (!has('-sources.jar')) errors << "$module: no sources jar"
+            if (!has('-javadoc.jar')) errors << "$module: no javadoc jar"
+            if (!has('.module')) errors << "$module: no Gradle module metadata"
+            files.findAll { it.contains('test-fixtures') && (it.endsWith('.jar') || it.endsWith('.pom')) }
+                .each { errors << "$module: publishes $it" }
+            def pomFile = files.findAll { it.endsWith('.pom') }.max()
+            if (pomFile == null) {
+                errors << "$module: no pom"
+                continue
+            }
+            def pom = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(new File(dir, pomFile))
+            def xpath = XPathFactory.newInstance().newXPath()
+            def text = { String path -> xpath.evaluate(path, pom).trim() }
+            for (path in ['/project/name', '/project/description', '/project/url',
+                    '/project/developers/developer/id', '/project/scm/url', '/project/scm/connection']) {
+                if (text(path).isEmpty()) errors << "$module: pom has no ${path - '/project/'}"
+            }
+            if (text('/project/licenses/license/name') != 'The Apache License, Version 2.0') {
+                errors << "$module: pom license is '${text('/project/licenses/license/name')}'"
+            }
+            if (text('count(/project/dependencyManagement)') != '0') errors << "$module: pom has dependencyManagement"
+            NodeList unversioned = xpath.evaluate('/project/dependencies/dependency[not(version)]/artifactId', pom,
+                XPathConstants.NODESET) as NodeList
+            if (unversioned.length > 0) errors << "$module: dependencies without version: ${unversioned.item(0).textContent}"
+        }
+        if (!errors.isEmpty()) throw new GradleException('Publication is not Maven Central ready:\n  ' + errors.join('\n  '))
+    }
+}

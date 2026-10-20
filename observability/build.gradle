@@ -1,0 +1,21 @@
+// Test-only: proves the dashboard, alert rules and OpenTelemetry guide against real Prometheus and Grafana.
+// Holds no main code and must not be published.
+dependencies {
+    testImplementation project(':spring-ai-insights-core')
+    testImplementation 'io.micrometer:micrometer-registry-prometheus'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.yaml:snakeyaml'
+    testImplementation 'com.jayway.jsonpath:json-path'
+    // Configuration metadata the OpenTelemetry guide is checked against.
+    testImplementation project(':spring-ai-insights-autoconfigure')
+    testImplementation 'org.springframework.boot:spring-boot-starter-opentelemetry'
+    testImplementation 'org.springframework.boot:spring-boot-starter-actuator'
+    testImplementation 'org.springframework.ai:spring-ai-autoconfigure-model-chat-observation'
+}
+
+tasks.named('test') {
+    inputs.dir('prometheus')
+    inputs.dir('grafana')
+    inputs.file('../docs/opentelemetry.md')
+    inputs.file('../README.md')
+}
