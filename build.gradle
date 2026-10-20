@@ -37,6 +37,14 @@ subprojects {
         add('managedVersions', platform("org.springframework.boot:spring-boot-dependencies:$springBootVersion"))
         add('managedVersions', platform("org.springframework.ai:spring-ai-bom:$springAiVersion"))
         add('managedVersions', platform("software.amazon.awssdk:bom:$awsSdkVersion"))
+        // Spring Boot 4.1.1 manages Jackson 3.1.5 and Tomcat 11.0.24, which have published advisories fixed in the
+        // versions below. The highest version wins; drop these once the Spring Boot version manages them.
+        add('managedVersions', platform('tools.jackson:jackson-bom:3.1.7'))
+        constraints {
+            add('managedVersions', 'org.apache.tomcat.embed:tomcat-embed-core:11.0.25')
+            add('managedVersions', 'org.apache.tomcat.embed:tomcat-embed-el:11.0.25')
+            add('managedVersions', 'org.apache.tomcat.embed:tomcat-embed-websocket:11.0.25')
+        }
         testImplementation 'org.springframework.boot:spring-boot-starter-test'
         testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     }
