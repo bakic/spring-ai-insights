@@ -53,6 +53,17 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
 
     public static final int ORDER = Ordered.HIGHEST_PRECEDENCE + 100;
 
+    /** Default cap, in characters, on the captured user message and on the captured answer. */
+    public static final int DEFAULT_MAX_CONTENT_LENGTH = 32_768;
+
+    /** Cap, in characters, on a conversation ID, which a caller may choose. */
+    public static final int MAX_CONVERSATION_ID_LENGTH = 200;
+
+    /** Caps, in characters, on the key and value of a turn attribute. */
+    static final int MAX_ATTRIBUTE_KEY_LENGTH = 100;
+
+    static final int MAX_ATTRIBUTE_VALUE_LENGTH = 500;
+
     private static final String UNKNOWN = "unknown";
 
     /** Marks a turn as published, so a stall timeout scheduled afterwards is cancelled at once. */
@@ -74,6 +85,8 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
 
     private final boolean captureContent;
 
+    private final int maxContentLength;
+
     private final TurnTimeouts timeouts;
 
     private final TraceIdSupplier traceIds;
@@ -82,6 +95,21 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
             @Nullable Pseudonymiser pseudonymiser, CostCalculator costs, AsyncEventWriter writer,
             InsightsMetrics metrics, String application, boolean captureContent, TurnTimeouts timeouts,
             TraceIdSupplier traceIds) {
+        this(observations, identities, pseudonymiser, costs, writer, metrics, application, captureContent,
+                DEFAULT_MAX_CONTENT_LENGTH, timeouts, traceIds);
+    }
+
+    /**
+     * @param maxContentLength the most characters kept of the user message and of the answer, when content is
+     * captured
+     */
+    public InsightsAdvisor(ObservationRegistry observations, InsightsIdentityResolver identities,
+            @Nullable Pseudonymiser pseudonymiser, CostCalculator costs, AsyncEventWriter writer,
+            InsightsMetrics metrics, String application, boolean captureContent, int maxContentLength,
+            TurnTimeouts timeouts, TraceIdSupplier traceIds) {
+        if (maxContentLength < 1) {
+            throw new IllegalArgumentException("maxContentLength must be at least 1: " + maxContentLength);
+        }
         this.observations = observations;
         this.identities = identities;
         this.pseudonymiser = pseudonymiser;
@@ -90,6 +118,7 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
         this.metrics = metrics;
         this.application = application;
         this.captureContent = captureContent;
+        this.maxContentLength = maxContentLength;
         this.timeouts = timeouts;
         this.traceIds = traceIds;
     }
@@ -169,12 +198,15 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
             ChatClientObservationContext chatClientContext = nearestChatClientContext(currentContext);
             TurnRecorder recorder = new TurnRecorder(UUID.randomUUID().toString(), application, Instant.now(),
                     startNanos, streaming, identity(CallerIdentityCapture.captured(chatClientContext), request),
-                    conversationIdMissing ? UUID.randomUUID().toString() : conversationId.toString(),
+                    conversationIdMissing ? UUID.randomUUID().toString()
+                            : truncate(conversationId.toString(), MAX_CONVERSATION_ID_LENGTH),
                     conversationIdMissing, costs);
             context.forEach((key, value) -> {
                 if (key.startsWith(InsightsContextKeys.ATTRIBUTE_PREFIX) && value != null) {
-                    recorder.putAttribute(key.substring(InsightsContextKeys.ATTRIBUTE_PREFIX.length()),
-                            value.toString());
+                    recorder.putAttribute(
+                            truncate(key.substring(InsightsContextKeys.ATTRIBUTE_PREFIX.length()),
+                                    MAX_ATTRIBUTE_KEY_LENGTH),
+                            truncate(value.toString(), MAX_ATTRIBUTE_VALUE_LENGTH));
                 }
             });
             recorder.offeredTools(offeredTools(request));
@@ -245,7 +277,9 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
                     if (state.text == null) {
                         state.text = new StringBuilder();
                     }
-                    state.text.append(text);
+                    if (state.text.length() < maxContentLength) {
+                        state.text.append(text);
+                    }
                 }
             }
             List<String> reasons = finishReasons(chunk);
@@ -264,7 +298,8 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
         try {
             long endNanos = System.nanoTime();
             if (captureContent) {
-                recorder.setContent(request.prompt().getUserMessage().getText(), assistantText);
+                recorder.setContent(truncate(request.prompt().getUserMessage().getText(), maxContentLength),
+                        truncate(assistantText, maxContentLength));
             }
             AtomicReference<@Nullable Future<?>> timeout = new AtomicReference<>();
             boolean deferred = recorder.finishWhenIdle(outcome, error, reasons, endNanos, r -> {
@@ -356,6 +391,18 @@ public final class InsightsAdvisor implements CallAdvisor, StreamAdvisor {
             current = parent == null ? null : parent.getContextView();
         }
         return null;
+    }
+
+    /** At most {@code max} characters of {@code value}, without cutting a surrogate pair in two. */
+    static @Nullable String truncate(@Nullable String value, int max) {
+        if (value == null || value.length() <= max) {
+            return value;
+        }
+        int end = max;
+        if (end > 0 && Character.isHighSurrogate(value.charAt(end - 1))) {
+            end--;
+        }
+        return value.substring(0, end);
     }
 
     private static ChatClientResponse withTurnId(ChatClientResponse response, String turnId) {

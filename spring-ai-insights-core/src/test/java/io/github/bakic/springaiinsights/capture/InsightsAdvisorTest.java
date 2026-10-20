@@ -64,6 +64,8 @@ class InsightsAdvisorTest {
 
     private boolean captureContent = false;
 
+    private int maxContentLength = InsightsAdvisor.DEFAULT_MAX_CONTENT_LENGTH;
+
     private Duration stallTimeout = Duration.ofSeconds(5);
 
     private TurnTimeouts timeouts;
@@ -85,7 +87,7 @@ class InsightsAdvisorTest {
     private InsightsAdvisor advisor() {
         timeouts = new TurnTimeouts(stallTimeout);
         return new InsightsAdvisor(registry, resolver, pseudonymiser, TurnRecorderTest.costs(), writer, metrics, "app",
-                captureContent, timeouts, traceIds);
+                captureContent, maxContentLength, timeouts, traceIds);
     }
 
     private ChatClient client(ScriptedChatModel model) {
@@ -374,6 +376,61 @@ class InsightsAdvisorTest {
         client(p -> List.of(ScriptedChatModel.chunk("ans"), text("wer", 1, 1))).prompt().user("hi").stream().content()
             .blockLast();
         assertThat(awaitTurn().assistantMessage()).isEqualTo("answer");
+    }
+
+    @Test
+    void capturedContentIsCutAtTheLimit() {
+        captureContent = true;
+        maxContentLength = 5;
+        client(p -> List.of(text("0123456789", 1, 1))).prompt().user("abcdefghij").call().content();
+        var turn = awaitTurn();
+        assertThat(turn.userMessage()).isEqualTo("abcde");
+        assertThat(turn.assistantMessage()).isEqualTo("01234");
+    }
+
+    @Test
+    void streamedContentIsCutAtTheLimit() {
+        captureContent = true;
+        maxContentLength = 4;
+        client(p -> List.of(ScriptedChatModel.chunk("ans"), ScriptedChatModel.chunk("wer"), text("s", 1, 1))).prompt()
+            .user("hi")
+            .stream()
+            .content()
+            .blockLast();
+        assertThat(awaitTurn().assistantMessage()).isEqualTo("answ");
+    }
+
+    @Test
+    void truncateDoesNotSplitASurrogatePair() {
+        assertThat(InsightsAdvisor.truncate("ab\uD83D\uDE00cd", 3)).isEqualTo("ab");
+        assertThat(InsightsAdvisor.truncate("ab\uD83D\uDE00cd", 4)).isEqualTo("ab\uD83D\uDE00");
+        assertThat(InsightsAdvisor.truncate("abc", 3)).isEqualTo("abc");
+        assertThat(InsightsAdvisor.truncate(null, 3)).isNull();
+    }
+
+    @Test
+    void conversationIdAndAttributesAreCapped() {
+        var longId = "c".repeat(InsightsAdvisor.MAX_CONVERSATION_ID_LENGTH + 50);
+        client(p -> List.of(text("answer", 1, 1))).prompt()
+            .user("hi")
+            .advisors(a -> a.param(org.springframework.ai.chat.memory.ChatMemory.CONVERSATION_ID, longId)
+                .param("ai-insights.attr." + "k".repeat(300), "v".repeat(2000)))
+            .call()
+            .content();
+        var turn = awaitTurn();
+        assertThat(turn.conversationId()).hasSize(InsightsAdvisor.MAX_CONVERSATION_ID_LENGTH);
+        assertThat(turn.attributes()).hasSize(1).allSatisfy((key, value) -> {
+            assertThat(key).hasSize(InsightsAdvisor.MAX_ATTRIBUTE_KEY_LENGTH);
+            assertThat(value).hasSize(InsightsAdvisor.MAX_ATTRIBUTE_VALUE_LENGTH);
+        });
+    }
+
+    @Test
+    void maxContentLengthMustBePositive() {
+        timeouts = new TurnTimeouts(stallTimeout);
+        assertThatThrownBy(() -> new InsightsAdvisor(registry, resolver, pseudonymiser, TurnRecorderTest.costs(),
+                writer, metrics, "app", true, 0, timeouts, traceIds))
+            .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

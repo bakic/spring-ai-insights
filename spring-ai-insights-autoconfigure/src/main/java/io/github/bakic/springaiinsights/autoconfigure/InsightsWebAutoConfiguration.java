@@ -14,6 +14,8 @@ import io.github.bakic.springaiinsights.web.DashboardPages;
 import io.github.bakic.springaiinsights.web.DashboardRoutes;
 import io.github.bakic.springaiinsights.web.FeedbackRoutes;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -34,6 +36,12 @@ import org.springframework.web.servlet.function.ServerResponse;
         "io.github.bakic.springaiinsights.web.FeedbackRoutes" })
 public class InsightsWebAutoConfiguration {
 
+    static final String ANONYMOUS_WARNING = "ai-insights.dashboard.allow-anonymous=true: the dashboard, including "
+            + "captured conversations, is served to everyone who can reach it, whatever role Spring Security would "
+            + "require. Use it only for local development";
+
+    private static final Log logger = LogFactory.getLog(InsightsWebAutoConfiguration.class);
+
     @Bean
     @ConditionalOnMissingBean(name = "insightsFeedbackRoutes")
     @ConditionalOnBean({ InsightsFeedback.class, InsightsMetrics.class })
@@ -52,6 +60,9 @@ public class InsightsWebAutoConfiguration {
             InsightsAnalytics analytics, InsightsEventStore store, PriceCatalog prices, Environment environment,
             ObjectProvider<KnowledgeCorpusCatalog> catalogs, ObjectProvider<WeeklyReports> reports) {
         InsightsProperties.Dashboard dashboard = properties.getDashboard();
+        if (dashboard.isAllowAnonymous()) {
+            logger.warn(ANONYMOUS_WARNING);
+        }
         Clock clock = Clock.systemUTC();
         DashboardPages pages = new DashboardPages(analytics, store,
                 InsightsAutoConfiguration.application(properties, environment), prices.currency(), clock,

@@ -461,6 +461,27 @@ class InsightsAutoConfigurationTest {
     }
 
     @Test
+    void shortSecretWarns(CapturedOutput output) {
+        runner.withPropertyValues("ai-insights.identity.secret=short")
+            .run(context -> assertThat(output).contains(InsightsAutoConfiguration.SHORT_SECRET_WARNING));
+    }
+
+    @Test
+    void longSecretDoesNotWarn(CapturedOutput output) {
+        runner.withPropertyValues("ai-insights.identity.secret=" + "k".repeat(InsightsAutoConfiguration.MIN_SECRET_BYTES))
+            .run(context -> assertThat(output).doesNotContain("is shorter than"));
+    }
+
+    @Test
+    void maxContentLengthIsConfigurable() {
+        runner.withPropertyValues("ai-insights.capture.max-content-length=100")
+            .run(context -> assertThat(context.getBean(InsightsProperties.class).getCapture().getMaxContentLength())
+                .isEqualTo(100));
+        runner.withPropertyValues("ai-insights.capture.max-content-length=0")
+            .run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
     void pseudonymiseOffCreatesNoPseudonymiser() {
         runner.withPropertyValues("ai-insights.identity.pseudonymise=false")
             .run(context -> assertThat(context).doesNotHaveBean(Pseudonymiser.class).hasSingleBean(InsightsAdvisor.class));

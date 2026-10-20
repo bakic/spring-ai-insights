@@ -400,6 +400,20 @@ public class InsightsProperties {
          */
         private boolean reactorContextPropagation = true;
 
+        /**
+         * The most characters kept of a captured user message and of a captured answer; longer text is cut. Only
+         * applies when ai-insights.capture-content is true.
+         */
+        private int maxContentLength = 32_768;
+
+        public int getMaxContentLength() {
+            return maxContentLength;
+        }
+
+        public void setMaxContentLength(int maxContentLength) {
+            this.maxContentLength = maxContentLength;
+        }
+
         public boolean isReactorContextPropagation() {
             return reactorContextPropagation;
         }

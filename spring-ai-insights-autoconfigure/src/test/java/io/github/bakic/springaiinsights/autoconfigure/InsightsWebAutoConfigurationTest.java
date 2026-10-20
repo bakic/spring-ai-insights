@@ -7,6 +7,7 @@ import java.util.Set;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 import io.github.bakic.springaiinsights.feedback.InsightsFeedback;
 import io.github.bakic.springaiinsights.knowledge.KnowledgeCorpusCatalog;
@@ -19,6 +20,8 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -29,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
+@ExtendWith(OutputCaptureExtension.class)
 class InsightsWebAutoConfigurationTest {
 
     private static final AutoConfigurations CONFIGS = AutoConfigurations.of(InsightsAutoConfiguration.class,
@@ -114,6 +118,18 @@ class InsightsWebAutoConfigurationTest {
         web.withClassLoader(new FilteredClassLoader(SecurityFilterChain.class))
             .withPropertyValues("ai-insights.dashboard.allow-anonymous=true")
             .run(context -> assertThat(context).hasBean("insightsDashboardRoutes"));
+    }
+
+    @Test
+    void allowAnonymousWarns(CapturedOutput output) {
+        web.withPropertyValues("ai-insights.dashboard.allow-anonymous=true", "ai-insights.identity.secret=k")
+            .run(context -> assertThat(output).contains(InsightsWebAutoConfiguration.ANONYMOUS_WARNING));
+    }
+
+    @Test
+    void dashboardWithoutAnonymousAccessDoesNotWarn(CapturedOutput output) {
+        web.withPropertyValues("ai-insights.identity.secret=k")
+            .run(context -> assertThat(output).doesNotContain("allow-anonymous=true"));
     }
 
     @Test

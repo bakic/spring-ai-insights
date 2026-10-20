@@ -508,8 +508,9 @@ Ratings appear on the Quality page, next to each turn of a conversation, and in 
 | `ai-insights.capture.stall-timeout` | `30s` | how long a finished turn waits for its model call's usage before it is recorded without it |
 | `ai-insights.capture.reactor-context-propagation` | `true` | turn on Reactor's automatic context propagation (JVM-wide), so searches and tool calls Spring AI runs on other threads during a streamed turn count in that turn |
 | `ai-insights.capture-content` | `false` | record prompt and answer text |
+| `ai-insights.capture.max-content-length` | `32768` | most characters kept of a captured message or answer; longer text is cut |
 | `ai-insights.identity.pseudonymise` | `true` | HMAC-SHA256 user IDs |
-| `ai-insights.identity.secret` | – | HMAC key; required with a persistent store |
+| `ai-insights.identity.secret` | – | HMAC key; required with a persistent store; use at least 32 bytes (a shorter key logs a warning) |
 | `ai-insights.identity.tenant-claim` | `tenant_id` | JWT claim holding the tenant |
 | `ai-insights.knowledge.document-key` | `source` | chunk metadata identifying the document; chunk ID when absent |
 | `ai-insights.knowledge.observe-stores` | `true` | wrap vector stores and `BedrockAgentRuntimeClient` beans that emit no observation |

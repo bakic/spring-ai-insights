@@ -55,6 +55,12 @@ public class InsightsAutoConfiguration {
     static final String NO_SECRET_WARNING = "ai-insights.identity.secret is not set: user IDs are pseudonymised "
             + "with a random key and will change on restart";
 
+    static final int MIN_SECRET_BYTES = 32;
+
+    static final String SHORT_SECRET_WARNING = "ai-insights.identity.secret is shorter than " + MIN_SECRET_BYTES
+            + " bytes: a weak secret lets someone who knows one user ID and its pseudonym recover the secret by "
+            + "brute force, and then re-identify every user";
+
     static final String NO_SECRET_FAILURE = "ai-insights.identity.secret must be set when turns are stored "
             + "persistently: pseudonymised user IDs must stay stable across restarts";
 
@@ -86,7 +92,11 @@ public class InsightsAutoConfiguration {
             logger.warn(NO_SECRET_WARNING);
             return Pseudonymiser.withRandomSecret();
         }
-        return new Pseudonymiser(secret.getBytes(StandardCharsets.UTF_8));
+        byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length < MIN_SECRET_BYTES) {
+            logger.warn(SHORT_SECRET_WARNING);
+        }
+        return new Pseudonymiser(bytes);
     }
 
     @Bean
@@ -202,7 +212,8 @@ public class InsightsAutoConfiguration {
             TraceIdSupplier traceIds, InsightsProperties properties, Environment environment) {
         return new InsightsAdvisor(observationRegistry.getIfUnique(() -> ObservationRegistry.NOOP), identityResolver,
                 pseudonymiser.getIfAvailable(), costs, writer, metrics, application(properties, environment),
-                properties.isCaptureContent(), timeouts, traceIds);
+                properties.isCaptureContent(), properties.getCapture().getMaxContentLength(), timeouts,
+                traceIds);
     }
 
     @Bean
