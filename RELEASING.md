@@ -8,7 +8,7 @@ The `observability` project and the demo are never published.
 ## One-time setup
 
 1. Create a [Central Portal account](https://central.sonatype.org/register/central-portal/#create-an-account).
-2. Verify the namespace that matches the group ID in `gradle.properties` (`group=io.github.springaiinsights`).
+2. Verify the namespace that matches the group ID in `gradle.properties` (`group=io.github.bakic`).
    An `io.github.<name>` namespace can only be verified by whoever owns the GitHub user or organization `<name>`.
    To publish under another namespace, change `group` and `projectUrl` in `gradle.properties` first.
 3. [Create a GPG key pair](https://central.sonatype.org/publish/requirements/gpg/#generating-a-key-pair) and
