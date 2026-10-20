@@ -87,19 +87,49 @@ public final class AsyncEventWriter implements AutoCloseable {
         try {
             store.save(turn);
         }
+        catch (StackOverflowError e) {
+            failed(turn, e);
+        }
         catch (VirtualMachineError e) {
+            stop(e);
             throw e;
         }
         catch (Throwable e) {
-            metrics.storeError();
-            long now = System.nanoTime();
-            long last = lastWarnNanos.get();
-            if (now - last >= WARN_INTERVAL_NANOS && lastWarnNanos.compareAndSet(last, now)) {
-                log.warn("ai-insights: failed to save turn " + turn.turnId() + "; insights data is being lost", e);
-            }
+            failed(turn, e);
         }
         finally {
             pending.remove(turn.turnId(), turn);
+        }
+    }
+
+    private void failed(ConversationTurn turn, Throwable e) {
+        metrics.storeError();
+        long now = System.nanoTime();
+        long last = lastWarnNanos.get();
+        if (now - last >= WARN_INTERVAL_NANOS && lastWarnNanos.compareAndSet(last, now)) {
+            log.warn("ai-insights: failed to save turn " + turn.turnId() + "; insights data is being lost", e);
+        }
+    }
+
+    /**
+     * The writer thread cannot survive this error: accepting turns would only fill the queue silently. Stops
+     * accepting them, so that {@link #submit} counts each one as dropped, and counts those still waiting.
+     */
+    private void stop(VirtualMachineError e) {
+        running = false;
+        metrics.storeError();
+        int lost = 0;
+        while (queue.poll() != null) {
+            lost++;
+            metrics.eventDropped();
+        }
+        pending.clear();
+        try {
+            log.error("ai-insights: the writer thread stopped on " + e.getClass().getSimpleName() + "; " + lost
+                    + " queued turns were dropped and no further turn is saved", e);
+        }
+        catch (Throwable ignored) {
+            // logging may fail for the same reason
         }
     }
 

@@ -125,6 +125,51 @@ class AsyncEventWriterTest {
     }
 
     @Test
+    void writerSurvivesStackOverflowFromStore() {
+        var calls = new AtomicInteger();
+        var saved = new InMemoryEventStore(100);
+        InsightsEventStore broken = new DelegatingStore(saved) {
+            @Override
+            public void save(ConversationTurn t) {
+                if (calls.getAndIncrement() == 0) {
+                    throw new StackOverflowError();
+                }
+                super.save(t);
+            }
+        };
+        try (var w = new AsyncEventWriter(broken, 10, metrics)) {
+            w.submit(turn("t1"));
+            w.submit(turn("t2"));
+        }
+        assertThat(saved.findTurn("t2")).isPresent();
+        assertThat(reg.get("ai.insights.store.errors").counter().count()).isEqualTo(1);
+    }
+
+    @Test
+    void fatalErrorStopsTheWriterAndLaterTurnsAreCountedAsDropped() throws Exception {
+        var failing = new CountDownLatch(1);
+        InsightsEventStore broken = new DelegatingStore(new InMemoryEventStore(10)) {
+            @Override
+            public void save(ConversationTurn t) {
+                failing.countDown();
+                throw new OutOfMemoryError("test");
+            }
+        };
+        try (var w = new AsyncEventWriter(broken, 10, metrics)) {
+            w.submit(turn("t1"));
+            assertThat(failing.await(5, TimeUnit.SECONDS)).isTrue();
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+            while (w.submit(turn("later")) && System.nanoTime() < deadline) {
+                Thread.sleep(10);
+            }
+            assertThat(w.submit(turn("after"))).isFalse();
+            assertThat(w.pending("after")).isEmpty();
+        }
+        assertThat(reg.get("ai.insights.events.dropped").counter().count()).isGreaterThanOrEqualTo(1);
+        assertThat(reg.get("ai.insights.store.errors").counter().count()).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
     void fullQueueDropsAndCounts() throws Exception {
         var release = new CountDownLatch(1);
         var entered = new CountDownLatch(1);
