@@ -16,6 +16,14 @@ tasks.register('previewDashboard', JavaExec) {
     mainClass = 'io.github.bakic.springaiinsights.web.DashboardPreview'
 }
 
+tasks.register('previewReport', JavaExec) {
+    description = 'Prints last week\'s report of the generated preview data as text, Slack text and HTML'
+    group = 'application'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.bakic.springaiinsights.web.ReportPreview'
+    args = [providers.gradleProperty('configuredModels').getOrElse('')]
+}
+
 def testDashboardScripts = tasks.register('testDashboardScripts', Exec) {
     description = 'Runs the dashboard script tests with Node.js 20 or later'
     group = 'verification'

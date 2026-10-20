@@ -1,8 +1,12 @@
 package io.github.bakic.springaiinsights.web;
 
+import java.net.URI;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.ZoneId;
+import java.util.List;
 
+import io.github.bakic.springaiinsights.report.WeeklyReports;
 import io.github.bakic.springaiinsights.store.InMemoryEventStore;
 
 import org.springframework.boot.SpringApplication;
@@ -32,11 +36,15 @@ public class DashboardPreview {
     @Bean
     RouterFunction<ServerResponse> previewDashboard(InMemoryEventStore store) {
         Clock clock = Clock.systemUTC();
+        // gpt-4.1 and gpt-4.1-mini are priced; local-llama is not, which the pages and the report point out.
+        List<String> priced = List.of("gpt-4.1-mini", "gpt-4.1");
+        WeeklyReports reports = new WeeklyReports(store, "EUR", ZoneId.of("Europe/Paris"), clock,
+                URI.create("https://app.example.com/ai-insights/"), priced);
         return DashboardRoutes.create("/ai-insights", "AI_INSIGHTS", true,
                 new DashboardPages(store, store, "support-assistant", "EUR", clock,
                         new DashboardOptions(PreviewData.catalogs(), Duration.ofMinutes(30),
-                                "https://grafana.example.com/explore?traceId={traceId}")),
-                clock);
+                                "https://grafana.example.com/explore?traceId={traceId}", priced)),
+                clock, reports);
     }
 
 }
