@@ -16,7 +16,12 @@ The `observability` project and the demo are never published.
    to a key server. Central rejects artifacts whose signing key it cannot find.
 4. [Generate a Portal user token](https://central.sonatype.org/publish/generate-portal-token/).
    The token, not your login, is the username and password for publishing.
-5. Add four repository secrets in GitHub (Settings → Secrets and variables → Actions):
+5. Create a GitHub environment named `release` (Settings → Environments). Add yourself, or another maintainer, as
+   a required reviewer, and under "Deployment branches and tags" allow only the tag pattern `v*`. The release job
+   runs in this environment, so its secrets are not available to other workflows or branches.
+6. Add a tag protection rule (Settings → Rules → Rulesets, target tags, pattern `v*`) so that only maintainers can
+   create or delete release tags.
+7. Add four secrets **to the `release` environment** (not as repository secrets):
 
    | Secret                   | Value                                                       |
    |--------------------------|-------------------------------------------------------------|
@@ -45,7 +50,8 @@ It also fails if test fixtures or any unexpected module get published. CI runs i
    git push origin vX.Y.Z
    ```
 
-   The workflow refuses to publish when the tag does not equal `v` + `version`, or when the version is a SNAPSHOT.
+   The workflow waits for the `release` environment's reviewer, then refuses to publish when the tagged commit is
+   not on `main`, when the tag does not equal `v` + `version`, or when the version is a SNAPSHOT.
    It builds, runs `verifyPublication`, then runs `publishAndReleaseToMavenCentral`, which uploads, waits for
    Central's validation and releases. Artifacts become downloadable 10 to 30 minutes later.
 3. Set `version` to the next `-SNAPSHOT` and commit.
