@@ -93,6 +93,9 @@ warning at startup when it finds 2.0.0.
    be priced differently, so guessing would show a wrong cost. List every model ID you use, as reported. A
    model that is not listed is recorded without a cost, and the Overview and Cost pages show a warning naming
    it, the configured entry it resembles, and the entries that exist, so you can fix the YAML.
+   Here only `gpt-4o` is configured while the application calls `gpt-4o-mini`:
+
+   ![Cost page warning for a model without a price](docs/images/demo-unpriced-cost.png)
 
    Amazon Bedrock geographic inference profiles (`eu.`, `us.`, `apac.`, …) and `global.` profiles are
    priced differently — in `eu-west-1`, Claude Sonnet 4.6 is 3.30 / 16.50 per 1M input/output tokens
@@ -142,7 +145,7 @@ The other pages: [usage](docs/images/demo-usage.png), [cost](docs/images/demo-co
 [knowledge base](docs/images/demo-knowledge.png), [tools](docs/images/demo-tools.png),
 [quality](docs/images/demo-quality.png) and [one conversation](docs/images/demo-conversation.png).
 
-To run it against a real model, add a Spring AI model starter to `demo/build.gradle.kts` (for example
+To run it against a real model, add a Spring AI model starter to `demo/build.gradle` (for example
 `org.springframework.ai:spring-ai-starter-model-openai` with `spring.ai.openai.api-key`), delete
 `SimulatedChatModel.java`, and set `demo.traffic.enabled=false` unless you want to pay for the generated
 questions. Pricing for `gpt-4o` and `gpt-4o-mini` is already configured in `demo/src/main/resources/application.yml`.
@@ -442,11 +445,41 @@ ai-insights:
   `ReportLock` on it or declare a `ReportLock` bean.
 - The week is the seven calendar days before the run, in `zone`. Each application sends its own
   report, covering all tenants. A failing channel never stops the other one, nor the application.
-- **Never throws**: if building the report or sending it fails, it's logged and skipped — there's
-  no retry before next week's run. The week's claim is held for 35 days, so a late restart within
-  that window won't resend an already-sent week.
+- **Never throws**: if building the report or sending it fails, it's logged. When the report cannot be
+  built, or no channel delivers it, the week's claim is given back, so the next run retries; once one channel
+  has delivered it, the claim is held for 35 days, so a restart within that window won't resend it.
 - Read it any time, behind the dashboard's access check: `GET {path}/report` (HTML) and
   `GET {path}/api/report` (JSON); add `?app=` for another application.
+
+### What it looks like
+
+The email carries the same figures as a plain-text and an HTML part; Slack gets the text with its own markup.
+
+![Weekly report, as the HTML email or the /report page](docs/images/weekly-report.png)
+
+The Slack message and the plain-text part of the email read like this (generated from the sample data with
+`./gradlew :spring-ai-insights-web:previewReport`):
+
+```text
+AI assistant weekly report: support-assistant, 13 Oct – 19 Oct 2026
+Active users: 44 (+5% vs previous week)
+Conversations: 218 (+22%)
+Cost: EUR 2.24 (+42%), EUR 0.01 per conversation (+17%)
+Positive feedback: 81% (−2 pts)
+Knowledge base queries with no result: 10% (+2 pts)
+Top tools: searchOrders (201 calls), trackParcel (144 calls), refund (56 calls), updateAddress (32 calls), escalateToHuman (21 calls)
+Projected cost for October 2026: EUR 8.03 (EUR 4.92 so far)
+Cost excludes 48 turns with unpriced models.
+Prices match the exact model name the provider reports; update ai-insights.pricing.models to price these models:
+- local-llama (71 calls): no similar name is configured
+Configured now: gpt-4.1-mini, gpt-4.1
+Open the dashboard: https://app.example.com/ai-insights/
+```
+
+The last four lines only appear when a week has turns whose model has no price. Each such model is listed
+with its call count and, when a configured entry has a similar name, that entry
+(`- gpt-4o-mini (38 calls): configured gpt-4o is not the same name`), so you can see what to change in
+`ai-insights.pricing.models`.
 
 ## Feedback
 
