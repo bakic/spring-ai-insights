@@ -47,6 +47,9 @@ public final class BedrockKnowledgeBaseCatalog implements KnowledgeCorpusCatalog
 
     private final Supplier<BedrockAgentClient> clientSupplier;
 
+    /** Serialises refreshes. Not the monitor of this object, so that {@link #close()} can interrupt a refresh. */
+    private final Object refreshLock = new Object();
+
     private @Nullable BedrockAgentClient client;
 
     private final Map<String, Set<String>> loaded = new LinkedHashMap<>();
@@ -93,7 +96,13 @@ public final class BedrockKnowledgeBaseCatalog implements KnowledgeCorpusCatalog
      * Lists the documents now. A knowledge base that fails keeps its previous documents; until at least one knowledge
      * base has been listed, {@link #documentIds()} is {@code null}.
      */
-    public synchronized void refresh() {
+    public void refresh() {
+        synchronized (refreshLock) {
+            load();
+        }
+    }
+
+    private void load() {
         BedrockAgentClient client;
         try {
             client = client();
@@ -104,6 +113,9 @@ public final class BedrockKnowledgeBaseCatalog implements KnowledgeCorpusCatalog
             return;
         }
         for (String knowledgeBaseId : knowledgeBaseIds) {
+            if (Thread.currentThread().isInterrupted()) {
+                return;
+            }
             Set<String> ids = new HashSet<>();
             try {
                 list(client, knowledgeBaseId, ids);

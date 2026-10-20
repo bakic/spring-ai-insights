@@ -63,6 +63,9 @@ public final class AwsPriceCatalog implements PriceCatalog, AutoCloseable {
     /** Model IDs for which the YAML-vs-AWS price mismatch has already been warned about, once. */
     private final Set<String> yamlOverrideWarned = ConcurrentHashMap.newKeySet();
 
+    /** Serialises refreshes. Not the monitor of this object, so that {@link #close()} can interrupt a refresh. */
+    private final Object refreshLock = new Object();
+
     private volatile @Nullable Snapshot snapshot;
 
     private @Nullable ScheduledExecutorService scheduler;
@@ -133,7 +136,13 @@ public final class AwsPriceCatalog implements PriceCatalog, AutoCloseable {
     /** Refreshes the snapshot now, synchronously. Never throws: a failure is logged and counted, and the
      * previous snapshot (or none) is kept; the suppliers are called again at the next refresh. Returns
      * whether the refresh succeeded, so the caller can schedule the next attempt accordingly. */
-    synchronized boolean refresh() {
+    boolean refresh() {
+        synchronized (refreshLock) {
+            return load();
+        }
+    }
+
+    private boolean load() {
         try {
             String region = regionSupplier.get();
             Map<String, String> modelNames = new LinkedHashMap<>();
