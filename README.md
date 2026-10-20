@@ -46,11 +46,11 @@ warning at startup when it finds 2.0.0.
 1. Add the starter. It is not on Maven Central yet; until the first release, clone this repository
    and use a Gradle composite build:
 
-   ```kotlin
-   // settings.gradle.kts
-   includeBuild("../spring-ai-insights")
-   // build.gradle.kts
-   implementation("io.github.bakic:spring-ai-insights-starter:<version>")
+   ```groovy
+   // settings.gradle
+   includeBuild('../spring-ai-insights')
+   // build.gradle
+   implementation 'io.github.bakic:spring-ai-insights-starter:<version>'
    ```
 
    Replace `<version>` with the version in this repository's `gradle.properties`
@@ -209,8 +209,8 @@ subclassed and is wrapped instead: inject it as `VectorStore`. Turn this off wit
 To also see documents that are **never** retrieved in an Amazon Bedrock Knowledge Base, add
 `spring-ai-insights-bedrock` (it brings the AWS SDK `bedrockagent` client) and list the knowledge bases:
 
-```kotlin
-implementation("io.github.bakic:spring-ai-insights-bedrock:<version>")
+```groovy
+implementation 'io.github.bakic:spring-ai-insights-bedrock:<version>'
 ```
 
 ```yaml
@@ -252,8 +252,8 @@ Instead of hand-typing Amazon Bedrock model prices (and having them drift from r
 profile but 3.00 / 15.00 through a `global.` profile), `spring-ai-insights-bedrock` can price Bedrock
 model calls automatically from the AWS Price List API:
 
-```kotlin
-implementation("io.github.bakic:spring-ai-insights-bedrock:<version>")
+```groovy
+implementation 'io.github.bakic:spring-ai-insights-bedrock:<version>'
 ```
 
 ```yaml

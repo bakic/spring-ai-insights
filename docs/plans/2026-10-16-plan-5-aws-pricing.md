@@ -84,7 +84,7 @@ Run: `./gradlew test`
 ### Task 2: Parse the Bedrock price list and model IDs
 
 **Files:**
-- Modify: `spring-ai-insights-bedrock/build.gradle.kts` (add `api("software.amazon.awssdk:pricing")`, `api("software.amazon.awssdk:bedrock")`; update `description` to mention pricing)
+- Modify: `spring-ai-insights-bedrock/build.gradle` (add `api("software.amazon.awssdk:pricing")`, `api("software.amazon.awssdk:bedrock")`; update `description` to mention pricing)
 - Create: `spring-ai-insights-bedrock/src/main/java/io/github/springaiinsights/bedrock/pricing/PriceScope.java`
 - Create: `…/bedrock/pricing/BedrockModelIds.java`
 - Create: `…/bedrock/pricing/BedrockPriceList.java`
@@ -260,7 +260,7 @@ Run: `./gradlew :spring-ai-insights-bedrock:test`
 - Create: `…/autoconfigure/InsightsBedrockPricingAutoConfiguration.java`
 - Modify: `…/autoconfigure/InsightsAutoConfiguration.java`
 - Modify: `spring-ai-insights-autoconfigure/src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
-- Modify: `spring-ai-insights-autoconfigure/build.gradle.kts` (`compileOnly` + `testImplementation` for `software.amazon.awssdk:pricing` and `:bedrock`)
+- Modify: `spring-ai-insights-autoconfigure/build.gradle` (`compileOnly` + `testImplementation` for `software.amazon.awssdk:pricing` and `:bedrock`)
 - Modify: `README.md`
 - Test: `…/autoconfigure/InsightsBedrockPricingAutoConfigurationTest.java`
 

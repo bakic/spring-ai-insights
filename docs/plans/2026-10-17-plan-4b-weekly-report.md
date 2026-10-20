@@ -172,7 +172,7 @@ Open the dashboard: {dashboardUrl}                   ← only when set
 **Files:**
 - Create in core `report/`: `ReportSender.java`, `SlackReportSender.java`, `MailReportSender.java`,
   `WeeklyReportJob.java`
-- Modify: `spring-ai-insights-core/build.gradle.kts` — `compileOnly` and `testImplementation`
+- Modify: `spring-ai-insights-core/build.gradle` — `compileOnly` and `testImplementation`
   `org.springframework:spring-context-support`, `jakarta.mail:jakarta.mail-api`; `testRuntimeOnly`
   `org.eclipse.angus:angus-mail`
 - Tests: `SlackReportSenderTest.java` (JDK `HttpServer` on port 0), `MailReportSenderTest.java` (a
@@ -229,7 +229,7 @@ Open the dashboard: {dashboardUrl}                   ← only when set
   (`CronExpression.isValidExpression`, absolute http(s) URIs)
 - Create: `autoconfigure/.../InsightsReportAutoConfiguration.java`, `autoconfigure/.../WeeklyReportSchedule.java`
 - Modify: `InsightsWebAutoConfiguration.java` (passes `ObjectProvider<WeeklyReports>.getIfAvailable()`; ordered after
-  the report auto-configuration), `AutoConfiguration.imports`, autoconfigure `build.gradle.kts` (`compileOnly` +
+  the report auto-configuration), `AutoConfiguration.imports`, autoconfigure `build.gradle` (`compileOnly` +
   `testImplementation` `spring-context-support`, `jakarta.mail-api`; `testRuntimeOnly` `angus-mail`)
 - Test: `InsightsReportAutoConfigurationTest.java`
 - Modify: `README.md` (Weekly report section, config rows, roadmap)

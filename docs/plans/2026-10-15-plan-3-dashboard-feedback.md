@@ -108,7 +108,7 @@ spring-ai-insights-web/                                                   (new m
     DashboardQuery.java, DashboardPages.java, DashboardRoutes.java, pages/*.java (Task 5)
   src/main/resources/ai-insights-dashboard/{index.html,app.js,app.css}     (Task 6)
 spring-ai-insights-autoconfigure/…/{InsightsFeedbackAutoConfiguration,InsightsWebAutoConfiguration,DashboardAccessCondition}.java
-spring-ai-insights-starter/build.gradle.kts                                (adds web module, Task 4)
+spring-ai-insights-starter/build.gradle                                (adds web module, Task 4)
 README.md                                                                   (Task 7)
 ```
 
@@ -253,9 +253,9 @@ README.md                                                                   (Tas
 ### Task 4: Web module and feedback endpoint
 
 **Files:**
-- Create: `spring-ai-insights-web/build.gradle.kts`, `web/FeedbackRoutes.java`, `web/ErrorBody.java`
+- Create: `spring-ai-insights-web/build.gradle`, `web/FeedbackRoutes.java`, `web/ErrorBody.java`
 - Create: `autoconfigure/…/InsightsFeedbackAutoConfiguration.java`, `InsightsWebAutoConfiguration.java`
-- Modify: `settings.gradle.kts`, `InsightsAutoConfiguration.java`, `InsightsMongoAutoConfiguration.java`, `InsightsProperties.java`, `AutoConfiguration.imports`, `autoconfigure/build.gradle.kts`, `starter/build.gradle.kts`
+- Modify: `settings.gradle`, `InsightsAutoConfiguration.java`, `InsightsMongoAutoConfiguration.java`, `InsightsProperties.java`, `AutoConfiguration.imports`, `autoconfigure/build.gradle`, `starter/build.gradle`
 - Test: `spring-ai-insights-web/src/test/java/…/FeedbackRoutesTest.java`, `autoconfigure/…/InsightsWebEndToEndTest.java`, `InsightsAutoConfigurationTest.java`
 
 **Interfaces:**

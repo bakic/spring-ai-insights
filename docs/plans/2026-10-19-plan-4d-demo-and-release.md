@@ -11,7 +11,7 @@ it the way Central would. The demo is a separate, never-published Gradle project
 model and an offline embedding model, so it runs with no API key, and every turn still goes through the real
 Spring AI tool, retrieval and observation paths that the starter captures.
 
-**Tech Stack:** Gradle 9 Kotlin DSL, vanniktech maven-publish 0.37.0 (from Maven Central), Spring Boot 4.1.1,
+**Tech Stack:** Gradle 9 Groovy DSL, vanniktech maven-publish 0.37.0 (from Maven Central), Spring Boot 4.1.1,
 Spring AI 2.0.1 (`spring-ai-vector-store-advisor` for `QuestionAnswerAdvisor`, `SimpleVectorStore`), Spring
 Security, GitHub Actions, actionlint.
 
@@ -56,9 +56,9 @@ realistic traffic for screenshots; CI; Maven Central release), §2 line 66 (Apac
 ### Task 1: Publication setup and `verifyPublication`
 
 **Files:**
-- Modify: `settings.gradle.kts` (add `pluginManagement { repositories { gradlePluginPortal(); mavenCentral() } }`;
+- Modify: `settings.gradle` (add `pluginManagement { repositories { gradlePluginPortal(); mavenCentral() } }`;
   the 0.37.0 plugin marker is only on Maven Central)
-- Modify: `build.gradle.kts` (root)
+- Modify: `build.gradle` (root)
 - Modify: `gradle.properties` (`projectUrl=…`)
 
 **Interfaces:**
@@ -129,8 +129,8 @@ realistic traffic for screenshots; CI; Maven Central release), §2 line 66 (Apac
 
 ### Task 3: Helpdesk demo application
 
-**Files (all under `demo/`, project `spring-ai-insights-demo`, wired in `settings.gradle.kts` like `observability`):**
-- Create: `demo/build.gradle.kts` (`application` plugin, `mainClass = io.github.springaiinsights.demo.HelpdeskApplication`;
+**Files (all under `demo/`, project `spring-ai-insights-demo`, wired in `settings.gradle` like `observability`):**
+- Create: `demo/build.gradle` (`application` plugin, `mainClass = io.github.springaiinsights.demo.HelpdeskApplication`;
   deps: starter, `spring-boot-starter-webmvc`, `spring-boot-starter-security`, `spring-ai-client-chat`,
   `spring-ai-vector-store`, `spring-ai-vector-store-advisor`, `micrometer-registry-prometheus`; test: starter-test,
   `spring-boot-starter-webmvc-test`, `spring-security-test`, awaitility)

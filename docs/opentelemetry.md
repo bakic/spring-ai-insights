@@ -45,8 +45,8 @@ dashboard to its trace in your backend.
 This is the path the shipped assets are built for. The starter already brings Spring Boot
 Actuator; add the Prometheus registry and expose its endpoint:
 
-```kotlin
-runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+```groovy
+runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 ```
 
 ```yaml
@@ -83,8 +83,8 @@ reach Prometheus through OTLP instead, the names may differ and the queries need
 For any OTLP backend, add Spring Boot's OpenTelemetry starter. It brings Micrometer Tracing with the
 OpenTelemetry bridge, the OTLP span exporter and the OTLP metrics registry:
 
-```kotlin
-implementation("org.springframework.boot:spring-boot-starter-opentelemetry")
+```groovy
+implementation 'org.springframework.boot:spring-boot-starter-opentelemetry'
 ```
 
 Tracing samples 10% of requests by default. While you set things up, sample everything:

@@ -73,11 +73,11 @@ spring-ai-insights-core/src/main/java/io/github/springaiinsights/
 spring-ai-insights-core/src/testFixtures/java/io/github/springaiinsights/analytics/
   InsightsAnalyticsContract.java, ContractTurns.java                       (new, Task 2)
 spring-ai-insights-mongodb/                                                (new module, Tasks 3-4)
-  build.gradle.kts
+  build.gradle
   src/main/java/io/github/springaiinsights/mongodb/{MongoEventStore,TurnDocuments,MongoIndexes}.java
   src/test/java/io/github/springaiinsights/mongodb/{MongoEventStoreTest,MongoAnalyticsContractTest}.java
 spring-ai-insights-autoconfigure/…/{InsightsMongoAutoConfiguration,MongoStoreCondition}.java (Task 5)
-spring-ai-insights-starter/build.gradle.kts     (adds the mongodb module, Task 5)
+spring-ai-insights-starter/build.gradle     (adds the mongodb module, Task 5)
 README.md                                       (Task 6)
 ```
 
@@ -134,7 +134,7 @@ Closes Plan 1's deferred minor: if a model observation never stops, the turn wai
 
 **Files:**
 - Create: `core/.../analytics/*.java` (see file structure), `core/src/testFixtures/.../analytics/{InsightsAnalyticsContract,ContractTurns}.java`
-- Modify: `core/build.gradle.kts` (apply `java-test-fixtures`; `testFixturesApi` junit-jupiter-api, assertj-core),
+- Modify: `core/build.gradle` (apply `java-test-fixtures`; `testFixturesApi` junit-jupiter-api, assertj-core),
   `core/.../store/InMemoryEventStore.java`
 - Test: `core/src/test/.../store/InMemoryAnalyticsContractTest.java`
 
@@ -238,14 +238,14 @@ Compare `BigDecimal`s with `isEqualByComparingTo`, doubles with `isCloseTo(x, wi
 ### Task 3: MongoDB module — mapping, writes, indexes
 
 **Files:**
-- Create: `spring-ai-insights-mongodb/build.gradle.kts`, `…/mongodb/{MongoEventStore,TurnDocuments,MongoIndexes}.java`
-- Modify: `settings.gradle.kts` (include the module)
+- Create: `spring-ai-insights-mongodb/build.gradle`, `…/mongodb/{MongoEventStore,TurnDocuments,MongoIndexes}.java`
+- Modify: `settings.gradle` (include the module)
 - Test: `…/mongodb/MongoEventStoreTest.java`
 
 **Interfaces:**
 - Consumes: `InsightsEventStore`, `TurnQuery`, `ConversationTurn` (Plan 1).
 - Produces:
-  - `build.gradle.kts`: `api(project(":spring-ai-insights-core"))`, `compileOnly("org.springframework.data:spring-data-mongodb")`;
+  - `build.gradle`: `api(project(":spring-ai-insights-core"))`, `compileOnly("org.springframework.data:spring-data-mongodb")`;
     tests: `spring-data-mongodb`, `org.testcontainers:testcontainers-junit-jupiter`, `org.testcontainers:testcontainers-mongodb`, `testFixtures(project(":spring-ai-insights-core"))`.
   - `public final class MongoEventStore implements InsightsEventStore, InsightsAnalytics` —
     `MongoEventStore(MongoOperations mongo, String collectionPrefix, Duration retention)`; collection
@@ -307,9 +307,9 @@ Compare `BigDecimal`s with `isEqualByComparingTo`, doubles with `isCloseTo(x, wi
 **Files:**
 - Create: `autoconfigure/.../{InsightsMongoAutoConfiguration,MongoStoreCondition}.java`, test `InsightsMongoEndToEndTest.java`
 - Modify: `autoconfigure/.../{InsightsProperties,InsightsAutoConfiguration}.java`, `AutoConfiguration.imports`,
-  `autoconfigure/build.gradle.kts` (`compileOnly` mongodb module + `spring-data-mongodb`; tests:
+  `autoconfigure/build.gradle` (`compileOnly` mongodb module + `spring-data-mongodb`; tests:
   `spring-boot-data-mongodb`, `spring-boot-testcontainers`, `testcontainers-mongodb`, `testcontainers-junit-jupiter`),
-  `starter/build.gradle.kts` (`api(project(":spring-ai-insights-mongodb"))`), `InsightsAutoConfigurationTest.java`
+  `starter/build.gradle` (`api(project(":spring-ai-insights-mongodb"))`), `InsightsAutoConfigurationTest.java`
 
 **Interfaces:**
 - Properties: `StoreType { AUTO, MEMORY, MONGODB }`; `retention: Duration = 90d`;

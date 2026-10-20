@@ -80,8 +80,8 @@ rate, TTFT p95) in the repo; a short guide for Langfuse / Phoenix / SigNoz / Dat
 ### Task 2: Observability project and the real scrape
 
 **Files:**
-- Modify: `settings.gradle.kts` (include `spring-ai-insights-observability`, `projectDir = file("observability")`)
-- Create: `observability/build.gradle.kts` — test-only: `testImplementation(project(":spring-ai-insights-core"))`,
+- Modify: `settings.gradle` (include `spring-ai-insights-observability`, `projectDir = file("observability")`)
+- Create: `observability/build.gradle` — test-only: `testImplementation(project(":spring-ai-insights-core"))`,
   `micrometer-registry-prometheus`, `testcontainers-junit-jupiter`, `org.yaml:snakeyaml`, `com.jayway.jsonpath:json-path`;
   no `java-library` publication (Plan 4d must not publish it)
 - Create: `observability/src/test/java/io/github/springaiinsights/observability/SampleScrape.java`
@@ -201,7 +201,7 @@ rate, TTFT p95) in the repo; a short guide for Langfuse / Phoenix / SigNoz / Dat
 **Files:**
 - Create: `docs/opentelemetry.md`
 - Modify: `README.md` (an "Observability backends" section linking the dashboard, the rules and the guide; roadmap)
-- Modify: `observability/build.gradle.kts` (test classpath: the Spring Boot modules containing
+- Modify: `observability/build.gradle` (test classpath: the Spring Boot modules containing
   `OtlpTracingProperties`, `OtlpMetricsProperties`, `TracingProperties`; Spring AI's chat observation
   auto-configuration; `:spring-ai-insights-autoconfigure`)
 - Test: `observability/src/test/java/io/github/springaiinsights/observability/GuidePropertiesTest.java`

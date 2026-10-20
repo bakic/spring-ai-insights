@@ -164,7 +164,7 @@ observation, so Insights, metrics and traces all see it.
 
 **Files:**
 - Create: `spring-ai-insights-autoconfigure/src/main/java/io/github/springaiinsights/autoconfigure/MicrometerTraceIdSupplier.java`
-- Modify: `InsightsAutoConfiguration.java` (`TraceIdSupplier` bean: nested `@ConditionalOnClass(name = "io.micrometer.tracing.Tracer")` config returning `MicrometerTraceIdSupplier` when `ObjectProvider<Tracer>.getIfUnique()` is non-null, else `NONE`; outer `@ConditionalOnMissingBean` fallback `NONE`), `spring-ai-insights-autoconfigure/build.gradle.kts` (`compileOnly("io.micrometer:micrometer-tracing")`, `testImplementation("io.micrometer:micrometer-tracing-test")`)
+- Modify: `InsightsAutoConfiguration.java` (`TraceIdSupplier` bean: nested `@ConditionalOnClass(name = "io.micrometer.tracing.Tracer")` config returning `MicrometerTraceIdSupplier` when `ObjectProvider<Tracer>.getIfUnique()` is non-null, else `NONE`; outer `@ConditionalOnMissingBean` fallback `NONE`), `spring-ai-insights-autoconfigure/build.gradle` (`compileOnly("io.micrometer:micrometer-tracing")`, `testImplementation("io.micrometer:micrometer-tracing-test")`)
 - Test: `MicrometerTraceIdSupplierTest.java`, `InsightsAutoConfigurationTest.java`
 
 **Interfaces:**
@@ -254,8 +254,8 @@ observation, so Insights, metrics and traces all see it.
 
 **Files:**
 - Create: `core/.../knowledge/KnowledgeCorpusCatalog.java`
-- Create module `spring-ai-insights-bedrock`: `build.gradle.kts` (`api(project(":spring-ai-insights-core"))`, `api(platform("software.amazon.awssdk:bom:${awsSdkVersion}"))`, `api("software.amazon.awssdk:bedrockagent")`), `src/main/java/io/github/springaiinsights/bedrock/BedrockKnowledgeBaseCatalog.java`
-- Modify: `settings.gradle.kts`, `gradle.properties` (`awsSdkVersion=2.51.2`), `InsightsProperties` (`Knowledge.Bedrock`: `knowledgeBaseIds`, `region`, `refresh`)
+- Create module `spring-ai-insights-bedrock`: `build.gradle` (`api(project(":spring-ai-insights-core"))`, `api(platform("software.amazon.awssdk:bom:${awsSdkVersion}"))`, `api("software.amazon.awssdk:bedrockagent")`), `src/main/java/io/github/springaiinsights/bedrock/BedrockKnowledgeBaseCatalog.java`
+- Modify: `settings.gradle`, `gradle.properties` (`awsSdkVersion=2.51.2`), `InsightsProperties` (`Knowledge.Bedrock`: `knowledgeBaseIds`, `region`, `refresh`)
 - Create: `autoconfigure/.../InsightsBedrockAutoConfiguration.java` (registered in `AutoConfiguration.imports`; `@ConditionalOnClass({BedrockKnowledgeBaseCatalog.class, BedrockAgentClient.class})`, `@ConditionalOnProperty(prefix = "ai-insights.knowledge.bedrock", name = "knowledge-base-ids[0]")`; uses a unique `BedrockAgentClient` bean, else builds one with the optional region and closes it on shutdown); autoconfigure `compileOnly` on the module and `bedrockagent`
 - Test: `spring-ai-insights-bedrock/src/test/java/io/github/springaiinsights/bedrock/BedrockKnowledgeBaseCatalogTest.java` (Mockito mock of `BedrockAgentClient`), `InsightsBedrockAutoConfigurationTest.java`
 
