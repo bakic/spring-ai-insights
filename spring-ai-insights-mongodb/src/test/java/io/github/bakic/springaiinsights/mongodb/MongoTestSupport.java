@@ -8,10 +8,10 @@ import org.testcontainers.mongodb.MongoDBContainer;
 
 import org.springframework.data.mongodb.core.MongoTemplate;
 
-/** One MongoDB 5.0 container (the supported floor) shared by the module's tests; each test gets a fresh database. */
+/** One MongoDB 7.0 container (the supported floor) shared by the module's tests; each test gets a fresh database. */
 final class MongoTestSupport {
 
-    static final String IMAGE = System.getProperty("ai-insights.test.mongo-image", "mongo:5.0");
+    static final String IMAGE = System.getProperty("ai-insights.test.mongo-image", "mongo:7.0");
 
     private static MongoDBContainer container;
 

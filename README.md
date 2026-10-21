@@ -300,7 +300,7 @@ ai-insights:
 
 ## Storage
 
-With Spring Data MongoDB configured in your app (`spring-boot-starter-data-mongodb`, MongoDB 5.0 or
+With Spring Data MongoDB configured in your app (`spring-boot-starter-data-mongodb`, MongoDB 7.0 or
 later), turns are stored in **your** database; nothing else to run. Otherwise they stay in memory.
 
 | | MongoDB | In memory |

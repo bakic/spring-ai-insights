@@ -10,8 +10,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 5.0 is the oldest supported server (MongoTestSupport.IMAGE).
-        mongo: ['mongo:5.0', 'mongo:7.0']
+        # 7.0 is the oldest supported server (MongoTestSupport.IMAGE).
+        mongo: ['mongo:7.0', 'mongo:8.3']
     name: build (${{ matrix.mongo }})
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1

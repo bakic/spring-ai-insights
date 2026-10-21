@@ -55,7 +55,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.data.mongodb.core.MongoOperations;
 
 /**
- * Stores turns in the application's MongoDB (5.0 or later), one document per turn in {@code <prefix>turns}, and
+ * Stores turns in the application's MongoDB (7.0 or later), one document per turn in {@code <prefix>turns}, and
  * feedback in {@code <prefix>feedback}, one document per rated turn. Indexes,
  * including a TTL index that enforces the retention, are created on the first save rather than at startup, so an
  * unreachable MongoDB never prevents the application from starting.

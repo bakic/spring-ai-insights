@@ -44,7 +44,7 @@ class InsightsMongoEndToEndTest {
 
         @Container
         @ServiceConnection
-        static MongoDBContainer mongo = new MongoDBContainer("mongo:5.0");
+        static MongoDBContainer mongo = new MongoDBContainer("mongo:7.0");
 
         @Autowired
         ChatClient.Builder builder;

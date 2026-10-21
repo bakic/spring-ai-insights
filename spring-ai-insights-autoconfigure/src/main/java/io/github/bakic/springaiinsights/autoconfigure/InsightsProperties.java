@@ -152,7 +152,7 @@ public class InsightsProperties {
         AUTO,
         /** Bounded in-memory store; data is lost on restart. */
         MEMORY,
-        /** The application's MongoDB (5.0 or later); startup fails if Spring Data MongoDB is not configured. */
+        /** The application's MongoDB (7.0 or later); startup fails if Spring Data MongoDB is not configured. */
         MONGODB
     }
 
