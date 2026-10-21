@@ -43,20 +43,13 @@ Requirements: Java 21, Spring Boot 4.1, Spring AI 2.0.1 or later. On Spring AI 2
 knowledge base searches made inside tools are not linked to their turn, so they are missing; the starter logs a
 warning at startup when it finds 2.0.0.
 
-1. Add the starter. It is not on Maven Central yet; until the first release, clone this repository
-   and use a Gradle composite build:
+1. Add the starter from [Maven Central](https://central.sonatype.com/namespace/io.github.bakic):
 
    ```groovy
-   // settings.gradle
-   includeBuild('../spring-ai-insights')
-   // build.gradle
    implementation 'io.github.bakic:spring-ai-insights-starter:<version>'
    ```
 
-   Replace `<version>` with the version in this repository's `gradle.properties`
-   (a composite build only needs group and artifact to match; the version is informational).
-   Once released, use the latest version from [Maven Central](https://central.sonatype.com/namespace/io.github.bakic)
-   instead of a composite build.
+   Replace `<version>` with the latest version on Maven Central.
 
 2. Set a pseudonymisation secret (from your secret store, not from Git):
 
@@ -607,5 +600,4 @@ See the [observability guide](docs/opentelemetry.md) for the configuration of ea
 
 ## Roadmap
 
-- **Release**: the first Maven Central release. Publishing is set up; see [RELEASING.md](RELEASING.md).
 - A dashboard for WebFlux applications.
