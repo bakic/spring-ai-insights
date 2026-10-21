@@ -30,7 +30,7 @@ class GuidePropertiesTest {
 
     private static final Pattern YAML_BLOCK = Pattern.compile("```yaml\\n(.*?)```", Pattern.DOTALL);
 
-    private static final Pattern GRADLE_DEPENDENCY = Pattern.compile("(?:implementation|runtimeOnly)\\(\"([^:\"]+):([^:\"]+)\"\\)");
+    private static final Pattern GRADLE_DEPENDENCY = Pattern.compile("(?:implementation|runtimeOnly) '([^:']+):([^:']+)'");
 
     private static final Pattern RELATIVE_LINK = Pattern.compile("\\]\\((?!https?://|#|mailto:)([^)#\\s]+)(?:#[^)]*)?\\)");
 
