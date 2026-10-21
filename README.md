@@ -284,7 +284,12 @@ ai-insights:
 - **Long-context tiers are ignored.** Models with a separate long-context price tier (e.g. very long
   prompts) always use the standard price, so **cost on very long prompts on those models is understated**.
 - **Application inference profile ARNs** (`arn:aws:bedrock:…:application-inference-profile/…`) are not
-  priced by AWS pricing; price them with `ai-insights.pricing.models` as before.
+  priced by AWS pricing; price them with `ai-insights.pricing.models` as before. Bedrock reports the
+  **full ARN** as the model name (`arn:aws:bedrock:eu-west-1:123456789012:application-inference-profile/abc123`),
+  not the short `application-inference-profile/abc123`, and matching is exact, so list the full ARN. In
+  Spring, reuse the property that already holds it (e.g. `model: ${BEDROCK_INFERENCE_PROFILE_ARN}`) so each
+  environment is priced by its own ARN. Use the rates of the profile's type (`eu.` or `global.`), not the
+  application profile's. The cost warning on the dashboard names the ARN that was reported.
 - **A custom `PriceCatalog` bean wins over everything.** If you define your own `PriceCatalog` bean,
   `ai-insights.pricing.aws` is not applied, and a startup info log says so.
 - `ai-insights.pricing.aws.enabled=true` fails startup if `ai-insights.pricing.currency` is not `USD`, or
