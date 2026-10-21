@@ -6,7 +6,9 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    # Not ubuntu-24.04 or later: some of those runners have Linux 6.19+, where MongoDB 8.x refuses to start
+    # (SERVER-121912) and every Mongo test waits for a server that never comes up. 22.04 has Linux 6.8.
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
